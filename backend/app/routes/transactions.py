@@ -6,6 +6,20 @@ from backend.app import db, socketio
 from backend.app.models import Transaction, FraudAlert
 from backend.app.utils.validators import validate_transaction_input
 
+
+def _get_risk_level(fraud_score):
+    """Categorize fraud score into risk level."""
+    if fraud_score > 0.8:
+        return "CRITICAL"
+    elif fraud_score > 0.6:
+        return "HIGH"
+    elif fraud_score > 0.4:
+        return "MEDIUM"
+    elif fraud_score > 0.2:
+        return "LOW"
+    else:
+        return "MINIMAL"
+
 @jwt_required()
 def list_transactions():
     user_id = get_jwt_identity()
@@ -111,10 +125,13 @@ def create_transaction():
         db.session.flush()
 
         from backend.app.services.fraud_detector import detect_fraud
+        from backend.app.websocket_events import broadcast_fraud_alert, broadcast_transaction_update
+
         fraud_score, explanation = detect_fraud(transaction)
         transaction.fraud_score = fraud_score
         transaction.is_fraud_predicted = fraud_score > 0.5
 
+        fraud_alert = None
         if transaction.is_fraud_predicted:
             fraud_alert = FraudAlert(
                 transaction_id=transaction.id,
@@ -123,14 +140,25 @@ def create_transaction():
                 explanation=explanation
             )
             db.session.add(fraud_alert)
-            socketio.emit("fraud_alert", {
+
+        db.session.commit()
+
+        # Emit WebSocket events
+        transaction_data = transaction.to_dict()
+        broadcast_transaction_update(user_id, transaction_data)
+
+        if transaction.is_fraud_predicted and fraud_alert:
+            alert_data = {
+                "alert_id": fraud_alert.id,
                 "transaction_id": transaction.id,
                 "fraud_score": fraud_score,
                 "merchant": transaction.merchant_name,
-                "amount": transaction.amount
-            }, broadcast=True)
-
-        db.session.commit()
+                "amount": transaction.amount,
+                "customer_id": transaction.customer_id,
+                "timestamp": transaction.timestamp.isoformat(),
+                "risk_level": _get_risk_level(fraud_score)
+            }
+            broadcast_fraud_alert(user_id, alert_data)
 
         return jsonify({
             "message": "Transaction created",

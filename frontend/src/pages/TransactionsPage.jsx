@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
 export default function TransactionsPage() {
+  const navigate = useNavigate()
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -130,7 +132,11 @@ export default function TransactionsPage() {
             </thead>
             <tbody>
               {transactions.map((tx) => (
-                <tr key={tx.id} className="border-t hover:bg-gray-50">
+                <tr
+                  key={tx.id}
+                  className="border-t hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/transactions/${tx.id}`)}
+                >
                   <td className="px-6 py-4 text-sm">{tx.customer_id}</td>
                   <td className="px-6 py-4 text-sm">{tx.merchant_name}</td>
                   <td className="px-6 py-4 text-sm font-medium">${tx.amount.toFixed(2)}</td>

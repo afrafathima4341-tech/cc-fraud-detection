@@ -7,7 +7,8 @@
       "Bash(./verify_setup.sh)",
       "Bash(git commit -m 'Phase 1: Add summary and verification script *)",
       "Bash(git commit -m 'Phase 2: Enhanced APIs with filtering, analytics, and validation *)",
-      "Bash(git commit -m 'Phase 3: Implement Graph Neural Network model for fraud detection *)"
+      "Bash(git commit -m 'Phase 3: Implement Graph Neural Network model for fraud detection *)",
+      "Bash(git commit -m 'Phase 4: WebSocket real-time alerts and UI enhancements *)"
     ]
   }
 }
