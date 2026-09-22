@@ -1,46 +1,27 @@
-import random
-from backend.app.models import Transaction, GraphEdge
+from backend.app.services.gnn_model_service import get_model_service
 
 def detect_fraud(transaction):
     """
-    Real-time fraud detection using GNN.
-    Phase 1: Placeholder with rule-based heuristics
-    Phase 3: Will be replaced with actual GNN model
+    Real-time fraud detection using GNN model.
+    Uses trained GNN if available, falls back to rule-based detection.
+
+    Args:
+        transaction: Transaction object
+
+    Returns:
+        fraud_score: float between 0 and 1
+        explanation: str with detailed explanation
     """
+    model_service = get_model_service()
 
-    fraud_score = 0.0
-    reasons = []
-
-    if transaction.amount > 10000:
-        fraud_score += 0.3
-        reasons.append("Large transaction amount")
-
-    recent_transactions = Transaction.query.filter(
-        Transaction.customer_id == transaction.customer_id,
-        Transaction.timestamp < transaction.timestamp
-    ).order_by(Transaction.timestamp.desc()).limit(5).all()
-
-    if len(recent_transactions) > 0:
-        avg_amount = sum(t.amount for t in recent_transactions) / len(recent_transactions)
-        if transaction.amount > avg_amount * 3:
-            fraud_score += 0.25
-            reasons.append("Unusual transaction amount for this customer")
-
-    merchant_fraud_count = Transaction.query.filter(
-        Transaction.merchant_id == transaction.merchant_id,
-        Transaction.is_fraud_predicted == True
-    ).count()
-
-    if merchant_fraud_count > 5:
-        fraud_score += 0.2
-        reasons.append("Merchant has history of fraud transactions")
-
-    fraud_score = min(fraud_score + random.uniform(0, 0.15), 1.0)
-
-    explanation = {
-        "score": round(fraud_score, 3),
-        "reasons": reasons,
-        "model": "rule-based-heuristic"
+    transaction_data = {
+        "customer_id": transaction.customer_id,
+        "merchant_id": transaction.merchant_id,
+        "card_id": transaction.card_id,
+        "amount": transaction.amount,
+        "merchant_name": transaction.merchant_name,
+        "category": transaction.category,
     }
 
-    return fraud_score, str(explanation)
+    fraud_score, explanation = model_service.predict_fraud_score(transaction_data)
+    return fraud_score, explanation

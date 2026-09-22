@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc
 from backend.app import db
 from backend.app.models import FraudAlert, Transaction
+from backend.app.services.explainability import FraudExplainer
 
 @jwt_required()
 def list_fraud_alerts():
@@ -96,3 +97,21 @@ def get_alert_summary():
         "high_risk_count": high_risk,
         "recent_alerts": [a.to_dict() for a in recent_alerts],
     }), 200
+
+
+@jwt_required()
+def get_alert_explanation(alert_id):
+    """Get detailed explanation for a fraud alert."""
+    user_id = get_jwt_identity()
+
+    alert = FraudAlert.query.filter_by(id=alert_id, user_id=user_id).first()
+    if not alert:
+        return jsonify({"message": "Alert not found"}), 404
+
+    transaction = alert.transaction
+    if not transaction:
+        return jsonify({"message": "Transaction not found"}), 404
+
+    explanation = FraudExplainer.explain_fraud_prediction(transaction, alert.fraud_score)
+
+    return jsonify(explanation), 200

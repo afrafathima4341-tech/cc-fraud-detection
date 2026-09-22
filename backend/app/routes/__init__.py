@@ -20,6 +20,7 @@ transactions_bp.add_url_rule("/analytics/customers", "get_customer_stats", trans
 
 fraud_alerts_bp.add_url_rule("", "list_fraud_alerts", fraud_alerts.list_fraud_alerts, methods=["GET"])
 fraud_alerts_bp.add_url_rule("/<int:alert_id>/feedback", "submit_feedback", fraud_alerts.submit_feedback, methods=["POST"])
+fraud_alerts_bp.add_url_rule("/<int:alert_id>/explanation", "get_alert_explanation", fraud_alerts.get_alert_explanation, methods=["GET"])
 fraud_alerts_bp.add_url_rule("/summary/overview", "get_alert_summary", fraud_alerts.get_alert_summary, methods=["GET"])
 
 dashboard_bp.add_url_rule("/stats", "get_stats", dashboard.get_stats, methods=["GET"])
