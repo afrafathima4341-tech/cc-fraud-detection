@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m 'Phase 1: Complete backend, frontend, and Docker setup *)"
+      "Bash(git commit -m 'Phase 1: Complete backend, frontend, and Docker setup *)",
+      "Bash(chmod +x /home/yasin/cc-trnx/verify_setup.sh)",
+      "Bash(./verify_setup.sh)",
+      "Bash(git commit -m 'Phase 1: Add summary and verification script *)",
+      "Bash(git commit -m 'Phase 2: Enhanced APIs with filtering, analytics, and validation *)"
     ]
   }
 }
