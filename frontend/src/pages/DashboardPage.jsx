@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
-  RadialBarChart, RadialBar, ComposedChart, ScatterChart, Scatter, ZAxis,
+  RadialBarChart, RadialBar, ComposedChart,
   AreaChart, Area
 } from 'recharts'
-import { connectWebSocket, disconnectWebSocket, onTransactionUpdate, offTransactionUpdate, onFraudAlert, offFraudAlert } from '../services/websocket'
+import { connectWebSocket, onTransactionUpdate, offTransactionUpdate } from '../services/websocket'
 import { useAuthStore } from '../store/authStore'
 import api from '../services/api'
 import AxiomaSection from '../components/AxiomaSection'
 import AxiomaCard from '../components/AxiomaCard'
 import AxiomaReadout from '../components/AxiomaReadout'
 import AxiomaBadge from '../components/AxiomaBadge'
-import { formatCompactINR, formatCompactNumber, formatINR, formatNumber } from '../utils/formatters'
+import { formatCompactINR, formatCompactNumber, formatCurrency, formatINR, formatNumber } from '../utils/formatters'
+
+const TransactionNetworkGraph = lazy(() => import('../components/TransactionNetworkGraph'))
 
 const timeRanges = [
   {label:'24h', value:'1'},
@@ -21,6 +23,32 @@ const timeRanges = [
   {label:'30d', value:'30'},
   {label:'90d', value:'90'},
 ]
+
+function toStreamEntry(transaction) {
+  const fraudScore = Number(transaction.fraud_score) || 0
+  const isFraud = Boolean(transaction.is_fraud_predicted)
+  return {
+    ...transaction,
+    timestamp: transaction.timestamp || new Date().toISOString(),
+    amount: Number(transaction.amount) || 0,
+    currency: transaction.currency || 'INR',
+    merchantName: transaction.merchant_name || transaction.merchant_id || 'Unknown merchant',
+    cardNetwork: transaction.card_network || '',
+    fraudScore,
+    isFraud,
+    risk: isFraud ? 'high' : fraudScore >= 0.3 ? 'medium' : 'low',
+  }
+}
+
+function mergeRecentTransactions(current, incoming, limit) {
+  const byId = new Map(current.filter((transaction) => transaction?.id).map((transaction) => [transaction.id, transaction]))
+  incoming.forEach((transaction) => {
+    if (transaction?.id) byId.set(transaction.id, transaction)
+  })
+  return [...byId.values()]
+    .sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+    .slice(0, limit)
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -31,7 +59,6 @@ export default function DashboardPage() {
   const [merchants, setMerchants] = useState([])
   const [customers, setCustomers] = useState([])
   const [alertSummary, setAlertSummary] = useState(null)
-  const [liveAlerts, setLiveAlerts] = useState([])
   const [timeRange, setTimeRange] = useState('30')
   const [loading, setLoading] = useState(true)
   const [fraudHistogram, setFraudHistogram] = useState([])
@@ -39,63 +66,34 @@ export default function DashboardPage() {
   const [geoData, setGeoData] = useState([])
   const [channelData, setChannelData] = useState([])
   const [realTimeStream, setRealTimeStream] = useState([])
+  const [networkTransactions, setNetworkTransactions] = useState([])
   const [websocketConnected, setWebsocketConnected] = useState(false)
   const { token } = useAuthStore()
 
   useEffect(() => {
     if (token) {
-      let mounted = true
-      let retryCount = 0
-      const maxRetries = 5
-
-      const connectWithRetry = () => {
-        connectWebSocket(token)
-
-        // Verify connection is active
-        setTimeout(() => {
-          if (mounted && retryCount < maxRetries) {
-            // Check if socket is still connected
-            const socket = getSocket()
-            if (!socket) {
-              retryCount++
-              connectWithRetry()
-        setWebsocketConnected(true)
-            }
-          }
-        }, 3000)
-      }
-
-      connectWithRetry()
-
-      const handleTransactionUpdate = () => {
+      const socket = connectWebSocket(token)
+      const handleSocketConnect = () => setWebsocketConnected(true)
+      const handleSocketDisconnect = () => setWebsocketConnected(false)
+      const handleTransactionUpdate = (transaction) => {
+        if (!transaction) return
         fetchStats()
-        setRealTimeStream(prev => {
-          const newItem = {
-            id: Date.now(),
-            timestamp: new Date().toISOString(),
-            amount: Math.random() * 1000 + 10,
-            risk: Math.random() > 0.8 ? 'high' : Math.random() > 0.5 ? 'medium' : 'low'
-          }
-          return [newItem, ...prev].slice(0, 50)
-        })
-      }
-      
-      const handleFraudAlert = (alert) => {
-        setLiveAlerts(prev => {
-          const exists = prev.some(a => a.alert_id === alert.alert_id)
-          if (!exists) return [alert, ...prev].slice(0, 20)
-          return prev
-        })
+        setNetworkTransactions((previous) => mergeRecentTransactions(previous, [transaction], 40))
+        setRealTimeStream((previous) => mergeRecentTransactions(previous, [toStreamEntry(transaction)], 50))
       }
 
+      socket.on('connect', handleSocketConnect)
+      socket.on('disconnect', handleSocketDisconnect)
+      socket.on('connect_error', handleSocketDisconnect)
+      if (socket.connected) handleSocketConnect()
       onTransactionUpdate(handleTransactionUpdate)
-      onFraudAlert(handleFraudAlert)
 
       return () => {
-        mounted = false
+        socket.off('connect', handleSocketConnect)
+        socket.off('disconnect', handleSocketDisconnect)
+        socket.off('connect_error', handleSocketDisconnect)
         offTransactionUpdate(handleTransactionUpdate)
-        offFraudAlert(handleFraudAlert)
-        disconnectWebSocket()
+        setWebsocketConnected(false)
       }
     }
   }, [token])
@@ -114,6 +112,7 @@ export default function DashboardPage() {
       fetchMerchants(),
       fetchCustomers(),
       fetchAlertSummary(),
+      fetchNetworkTransactions(),
       fetchFraudHistogram(),
       fetchRiskRadar(),
       fetchGeoData(),
@@ -182,6 +181,17 @@ export default function DashboardPage() {
       setAlertSummary(response.data)
     } catch (e) {
       console.error('Failed to fetch alert summary:', e)
+    }
+  }
+
+  const fetchNetworkTransactions = async () => {
+    try {
+      const response = await api.get('/transactions?page=1&per_page=40')
+      const recent = response.data.transactions || []
+      setNetworkTransactions((previous) => mergeRecentTransactions(previous, recent, 40))
+      setRealTimeStream((previous) => mergeRecentTransactions(previous, recent.map(toStreamEntry), 50))
+    } catch (e) {
+      console.error('Failed to fetch transaction network:', e)
     }
   }
 
@@ -274,19 +284,6 @@ export default function DashboardPage() {
     }
   }
 
-  const handleFeedback = async (alertId, confirmed) => {
-    try {
-      await api.post(`/fraud-alerts/${alertId}/feedback`, { 
-        is_confirmed: confirmed,
-        is_false_positive: !confirmed
-      })
-      fetchAlertSummary()
-      setLiveAlerts(prev => prev.filter(a => a.alert_id !== alertId))
-    } catch (e) {
-      console.error('Feedback failed', e)
-    }
-  }
-
   const exportCSV = async () => {
     try {
       const res = await api.get('/transactions?page=1&per_page=1000')
@@ -321,6 +318,12 @@ export default function DashboardPage() {
   const riskBarData = fraudDistribution ? [
     { name:'Risk', high_risk: fraudDistribution.high_risk, medium_risk: fraudDistribution.medium_risk, low_risk: fraudDistribution.low_risk }
   ] : []
+  const hasCurrencyBreakdown = Boolean(stats.amount_by_currency)
+  const currencyAmounts = stats.amount_by_currency || {}
+  const fraudCurrencyAmounts = stats.fraud_amount_by_currency || {}
+  const inrTotalAmount = currencyAmounts.INR || 0
+  const inrFraudAmount = fraudCurrencyAmounts.INR || 0
+  const otherCurrencyAmounts = Object.entries(currencyAmounts).filter(([currency, amount]) => currency !== 'INR' && amount > 0)
 
   return (
     <div className="bg-grid" style={{ minHeight: '100vh', paddingTop: 100 }}>
@@ -337,7 +340,7 @@ export default function DashboardPage() {
             <button key={r.value} onClick={()=>setTimeRange(r.value)} style={{
               padding:'6px 12px', borderRadius:8, border:'1px solid var(--border)',
               background: timeRange===r.value ? 'var(--accent-1)' : 'var(--bg-card-2)',
-              color: timeRange===r.value ? 'white' : 'var(--fg)', fontFamily:'JetBrains Mono, monospace', fontSize:12
+              color: timeRange===r.value ? 'var(--bg)' : 'var(--fg)', fontFamily:'JetBrains Mono, monospace', fontSize:12
             }}>{r.label}</button>
           ))}
           <button onClick={exportCSV} style={{
@@ -367,48 +370,87 @@ export default function DashboardPage() {
           </AxiomaCard>
           <AxiomaCard>
             <AxiomaReadout
-              label="Total Amount"
-              value={formatCompactINR(stats.total_amount)}
-              title={formatINR(stats.total_amount)}
-              ariaLabel={formatINR(stats.total_amount)}
+              label="Total Amount (INR)"
+              value={hasCurrencyBreakdown ? formatCompactINR(inrTotalAmount) : '—'}
+              title={hasCurrencyBreakdown ? formatINR(inrTotalAmount) : 'Currency breakdown unavailable'}
+              ariaLabel={hasCurrencyBreakdown ? formatINR(inrTotalAmount) : 'Currency breakdown unavailable'}
             />
-            <div title={formatINR(stats.fraud_amount)} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--accent-2)', marginTop: 8 }}>{formatCompactINR(stats.fraud_amount)} fraud</div>
+            <div title={hasCurrencyBreakdown ? formatINR(inrFraudAmount) : undefined} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--accent-2)', marginTop: 8 }}>{hasCurrencyBreakdown ? formatCompactINR(inrFraudAmount) : '—'} fraud</div>
+            {!hasCurrencyBreakdown && (
+              <div style={{ marginTop: 8, color: 'var(--fg-dim)', fontSize: 11 }}>Restart the backend to load currency-separated totals.</div>
+            )}
+            {hasCurrencyBreakdown && inrTotalAmount === 0 && stats.total_transactions > 0 && (
+              <div style={{ marginTop: 8, color: 'var(--fg-dim)', fontSize: 11 }}>No INR transactions yet.</div>
+            )}
+            {otherCurrencyAmounts.length > 0 && (
+              <div style={{ marginTop: 8, color: 'var(--fg-dim)', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>
+                {otherCurrencyAmounts.map(([currency, amount]) => (
+                  <div key={currency}>{currency} recorded separately: {formatCurrency(amount, currency)}</div>
+                ))}
+              </div>
+            )}
           </AxiomaCard>
         </div>
 
-        {/* Alert Summary */}
-        {alertSummary && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, margin:'16px 0' }}>
-            <AxiomaCard title="Alert Summary" subtitle="STATUS OVERVIEW">
-              <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:13, lineHeight:1.8 }}>
-                <div>Total Alerts: <b>{alertSummary.total_alerts}</b></div>
-                <div>Confirmed: <b style={{color:'var(--accent-3)'}}>{alertSummary.confirmed}</b></div>
-                <div>False Positives: <b style={{color:'var(--accent-2)'}}>{alertSummary.false_positives}</b></div>
-                <div>Unreviewed: <b>{alertSummary.unreviewed}</b></div>
-                <div>Avg Score: <b>{alertSummary.avg_fraud_score.toFixed(3)}</b></div>
+        {/* Live linked activity */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,420px),1fr))', alignItems:'start', gap:16, margin:'16px 0' }}>
+            <AxiomaCard title="Linked Transaction Network" subtitle="CUSTOMER · PAYMENT · MERCHANT">
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8, fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--fg-dim)' }}>
+                <span><span className={websocketConnected ? 'live-dot' : ''} style={!websocketConnected ? { display:'inline-block', width:7, height:7, borderRadius:'50%', background:'var(--muted)', marginRight:8 } : undefined} />{websocketConnected ? 'LIVE' : 'OFFLINE'}</span>
+                <span>{networkTransactions.length} linked transactions</span>
+              </div>
+              <Suspense fallback={<div style={{ height:380, display:'grid', placeItems:'center', color:'var(--fg-dim)', fontSize:13 }}>Loading network…</div>}>
+                <TransactionNetworkGraph
+                  transactions={networkTransactions}
+                  onNodeSelect={(node) => {
+                    if (node.queryKey && node.queryValue) {
+                      navigate(`/transactions?${node.queryKey}=${encodeURIComponent(node.queryValue)}`)
+                    }
+                  }}
+                />
+              </Suspense>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'8px 14px', marginTop:10, color:'var(--fg-dim)', fontFamily:'JetBrains Mono, monospace', fontSize:10 }}>
+                {[
+                  ['Customer', '#4dd4ac'], ['Merchant', '#d4ff3a'], ['Card', '#ffb627'],
+                  ['UPI', '#75c7e7'], ['Bank', '#ff936d'], ['Network', '#c3a6ff'], ['Flagged', '#ff5e62'],
+                ].map(([label, color]) => (
+                  <span key={label} style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:color }} />{label}
+                  </span>
+                ))}
               </div>
             </AxiomaCard>
 
-            <AxiomaCard title="Live Alerts" subtitle="REAL-TIME FEED">
-              <div style={{ maxHeight:240, overflowY:'auto', display:'flex', flexDirection:'column', justifyContent:'center' }}>
-                {liveAlerts.length > 0 && (
-                  <div style={{ overflowY: 'auto' }}>
-                    {liveAlerts.map((a,i)=>(
-                      <div key={i} style={{ borderBottom:'1px solid var(--border)', padding:'8px 0', fontSize:12, display:'flex', alignItems:'center' }}>
-                        <span style={{fontFamily:'JetBrains Mono, monospace', cursor:'pointer', color:'var(--accent-1)', flex:1}} onClick={()=>navigate(`/transactions/${a.transaction_id}`)}>{a.transaction_id}</span>
-                        <span style={{color:'var(--accent-2)'}}>{a.risk_level}</span>
-                        <span style={{marginLeft:8, fontSize:10, background:'var(--bg-card-2)', borderRadius:4, padding:'2px 6px'}}>#{a.alert_id}</span>
-                      </div>
-                    ))}
+            <AxiomaCard title="Live Transaction Stream" subtitle="REAL-TIME FLOW">
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8, fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'var(--fg-dim)' }}>
+                <span><span className={websocketConnected ? 'live-dot' : ''} style={!websocketConnected ? { display:'inline-block', width:7, height:7, borderRadius:'50%', background:'var(--muted)', marginRight:8 } : undefined} />{websocketConnected ? 'LIVE' : 'OFFLINE'}</span>
+                <span>{realTimeStream.length} recent</span>
+              </div>
+              <div aria-live="polite" aria-label="Recent live transactions" style={{ display:'grid', gap:6, maxHeight:260, overflowY:'auto' }}>
+                {realTimeStream.length === 0 ? (
+                  <div style={{ padding:'16px 8px', color:'var(--fg-dim)', fontSize:13 }}>
+                    {websocketConnected ? 'Waiting for the next transaction…' : 'Waiting for a live connection…'}
                   </div>
-                )}
-                {liveAlerts.length===0 && !websocketConnected && <div style={{color:'var(--fg-dim)', fontSize:12, textAlign:'center'}}>Not connected</div>}
-                {liveAlerts.length===0 && websocketConnected && <div style={{color:'var(--fg-dim)', fontSize:12, textAlign:'center'}}>No live alerts</div>}
-                {loading && <div style={{color:'var(--fg-dim)', fontSize:12, textAlign:'center'}}>Connecting...</div>}
+                ) : realTimeStream.slice(0, 5).map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => navigate(`/transactions/${entry.id}`)}
+                    style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) auto', alignItems:'center', gap:12, width:'100%', padding:'10px 12px', border:'1px solid var(--border)', borderRadius:6, background:'var(--bg-card-2)', color:'var(--fg)', textAlign:'left', cursor:'pointer' }}
+                  >
+                    <span style={{ minWidth:0 }}>
+                      <span style={{ display:'block', overflow:'hidden', color:'var(--fg)', fontSize:13, textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.merchantName}</span>
+                      <span style={{ color:'var(--fg-dim)', fontFamily:'JetBrains Mono, monospace', fontSize:10 }}>{[`#${entry.id}`, entry.channel, entry.cardNetwork].filter(Boolean).join(' · ')} · {new Date(entry.timestamp).toLocaleTimeString()}</span>
+                    </span>
+                    <span style={{ textAlign:'right' }}>
+                      <span style={{ display:'block', fontFamily:'JetBrains Mono, monospace', fontSize:12 }}>{formatCurrency(entry.amount, entry.currency)}</span>
+                      <span style={{ color:entry.isFraud ? 'var(--accent-2)' : entry.risk === 'medium' ? 'var(--accent-4)' : 'var(--accent-3)', fontSize:10 }}>{entry.isFraud ? 'FLAGGED' : `RISK ${entry.fraudScore.toFixed(2)}`}</span>
+                    </span>
+                  </button>
+                ))}
               </div>
             </AxiomaCard>
           </div>
-        )}
 
         {/* Charts Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 32, marginBottom: 32 }}>
@@ -510,8 +552,8 @@ export default function DashboardPage() {
         {riskCategories.length > 0 && (
           <AxiomaCard title="Fraud by Category" subtitle="MERCHANT TYPE" style={{marginTop:32}}>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+              <table className="w-full category-risk-table">
+                <thead>
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-medium">Category</th>
                     <th className="px-6 py-3 text-left text-sm font-medium">Transactions</th>
@@ -521,15 +563,15 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {riskCategories.map((cat, idx) => (
-                    <tr key={idx} className="border-t hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-fraud-600 font-medium">{cat.category}</td>
-                      <td className="px-6 py-4 text-sm font-medium">{cat.transaction_count}</td>
-                      <td className="px-6 py-4 text-sm text-fraud-600 font-medium">{cat.fraud_count}</td>
+                    <tr key={idx}>
+                      <td className="category-risk-name">{cat.category}</td>
+                      <td>{cat.transaction_count}</td>
+                      <td className="category-risk-count">{cat.fraud_count}</td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div className="bg-fraud-600 h-2 rounded-full" style={{ width: `${Math.min(cat.fraud_rate, 100)}%` }}></div>
+                        <div className="category-risk-meter">
+                          <div className="category-risk-meter__value" style={{ width: `${Math.min(cat.fraud_rate, 100)}%` }}></div>
                         </div>
-                        <span className="text-xs">{cat.fraud_rate}%</span>
+                        <span className="category-risk-rate">{cat.fraud_rate}%</span>
                       </td>
                     </tr>
                   ))}
@@ -589,31 +631,6 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </AxiomaCard>
 
-            {/* Real-time Stream Visualization */}
-            <AxiomaCard title="Live Transaction Stream" subtitle="REAL-TIME FLOW">
-              <div style={{ height: 300, position: 'relative', overflow: 'hidden' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" dataKey="id" hide />
-                    <YAxis type="number" dataKey="amount" hide />
-                    <ZAxis range={[60, 600]} />
-                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)' }} />
-                    <Scatter data={realTimeStream.slice(0, 50)} fill="var(--accent-1)">
-                      {realTimeStream.slice(0, 50).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={
-                          entry.risk === 'high' ? '#ef4444' : 
-                          entry.risk === 'medium' ? '#f97316' : '#10b981'
-                        } />
-                      ))}
-                    </Scatter>
-                  </ScatterChart>
-                </ResponsiveContainer>
-                <div style={{ position: 'absolute', top: 10, left: 10, background: 'var(--bg-card)', padding: '8px 12px', borderRadius: 8, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
-                  LIVE • {realTimeStream.length} events
-                </div>
-              </div>
-            </AxiomaCard>
           </div>
 
           {/* Risk Radar & Advanced Metrics */}

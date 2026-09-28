@@ -7,11 +7,53 @@
   --fg-dim: #a8a496;
   --muted: #6b6d7a;
   --accent: #d4ff3a;
+  --accent-1: var(--accent);
   --accent-2: #ff5e62;
   --accent-3: #4dd4ac;
   --accent-4: #ffb627;
   --border: rgba(240, 235, 225, 0.08);
   --border-strong: rgba(240, 235, 225, 0.18);
+}
+
+.login-page {
+  background:
+    radial-gradient(ellipse at 15% 10%, rgba(77, 212, 172, 0.12), transparent 45%),
+    linear-gradient(135deg, #10141a, #171b20 58%, #101316);
+}
+.login-panel {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--fg);
+}
+.login-panel input {
+  background: var(--bg-card-2);
+  color: var(--fg);
+}
+.login-panel input::placeholder {
+  color: var(--muted);
+}
+.login-panel label,
+.login-panel p {
+  color: var(--fg-dim);
+}
+.login-panel input:focus {
+  border-color: var(--accent-3);
+  box-shadow: 0 0 0 2px rgba(77, 212, 172, 0.2);
+}
+.login-submit {
+  border: 0;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+.login-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.login-link {
+  background: transparent;
+  border: 0;
+  color: var(--accent-3);
+  cursor: pointer;
 }
 
 .axioma-nav {
@@ -285,6 +327,9 @@
 }
 .readout-value {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  display: block;
   overflow: hidden;
   font-family: 'Fraunces', serif;
   font-size: 28px;
@@ -292,6 +337,63 @@
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.category-risk-table {
+  border-collapse: collapse;
+  color: var(--fg);
+}
+.category-risk-table thead {
+  background: var(--bg-card-2);
+  color: var(--fg-dim);
+}
+.category-risk-table th {
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-strong);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.category-risk-table td {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.category-risk-table tbody tr {
+  transition: background-color 150ms ease;
+}
+.category-risk-table tbody tr:hover {
+  background: var(--bg-card-2);
+}
+.category-risk-name {
+  color: var(--accent-3);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.category-risk-count {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+.category-risk-meter {
+  height: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: rgba(240, 235, 225, 0.08);
+}
+.category-risk-meter__value {
+  min-width: 2px;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-2);
+}
+.category-risk-rate {
+  color: var(--fg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
 }
 
 .live-dot {

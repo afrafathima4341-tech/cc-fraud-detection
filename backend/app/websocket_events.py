@@ -9,9 +9,9 @@ import json
 connected_users = {}
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     """Handle WebSocket connection."""
-    token = request.args.get('token')
+    token = (auth or {}).get('token') or request.args.get('token')
     if not token:
         return False
 

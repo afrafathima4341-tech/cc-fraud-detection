@@ -44,8 +44,11 @@ class Transaction(db.Model):
     merchant_location = db.Column(db.String(255), nullable=True)
     category = db.Column(db.String(50), nullable=True)
     card_last4 = db.Column(db.String(4), nullable=True)
+    card_network = db.Column(db.String(30), nullable=True)
+    upi_id = db.Column(db.String(100), nullable=True)
+    payer_bank = db.Column(db.String(100), nullable=True)
     channel = db.Column(db.String(50), nullable=True)
-    currency = db.Column(db.String(10), default='USD')
+    currency = db.Column(db.String(10), default='INR')
     ip_address = db.Column(db.String(50), nullable=True)
     device_id = db.Column(db.String(100), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False)
@@ -66,6 +69,9 @@ class Transaction(db.Model):
             "merchant_location": self.merchant_location,
             "card_id": self.card_id,
             "card_last4": self.card_last4,
+            "card_network": self.card_network,
+            "upi_id": self.upi_id,
+            "payer_bank": self.payer_bank,
             "channel": self.channel,
             "currency": self.currency,
             "ip_address": self.ip_address,

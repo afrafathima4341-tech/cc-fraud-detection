@@ -40,6 +40,20 @@ npm install
 
 ### 2. Run the Application
 
+For the real-time INR fraud demo, run one of these from the repository root. It starts the backend and frontend, seeds sample transactions, and streams new UPI, card, and net-banking transactions until you press Ctrl+C:
+
+```bash
+./scripts/demo.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+./scripts/demo.ps1
+```
+
+The scripts use the local demo account `admin@fraud.local` / `Admin@12345` by default. Set `AXIOMA_DEMO_EMAIL` and `AXIOMA_DEMO_PASSWORD` to override it.
+
 **Terminal 1 - Start Backend:**
 ```bash
 cd backend
@@ -98,6 +112,12 @@ cc-trnx/
 │   │   └── main.jsx                 # React entry point
 │   ├── package.json                 # Node dependencies
 │   └── vite.config.js               # Vite configuration
+│
+├── scripts/                          # Local setup and demo scripts
+│   ├── demo.sh
+│   ├── demo.ps1
+│   ├── start.sh
+│   └── verify_setup.sh
 │
 └── README.md                         # This file
 ```

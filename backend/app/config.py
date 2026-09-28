@@ -10,6 +10,10 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
 
     @classmethod
+    def init_app(cls, app):
+        pass
+
+    @classmethod
     def _validate_secret(cls, config_name):
         """Fail closed if the JWT secret is the insecure default in production."""
         secret = os.getenv("JWT_SECRET_KEY", _DEFAULT_DEV_SECRET)

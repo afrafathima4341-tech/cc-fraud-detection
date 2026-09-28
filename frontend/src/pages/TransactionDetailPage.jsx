@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import AxiomaSection from '../components/AxiomaSection'
 import AxiomaCard from '../components/AxiomaCard'
+import { formatCurrency } from '../utils/formatters'
 
 export default function TransactionDetailPage() {
   const { transactionId } = useParams()
@@ -73,9 +74,12 @@ export default function TransactionDetailPage() {
               ['Customer ID', transaction.customer_id],
               ['Merchant', transaction.merchant_name],
               ['Merchant Bank', transaction.merchant_bank || 'N/A'],
+              ['Payer Bank', transaction.payer_bank || 'N/A'],
               ['Merchant Location', transaction.merchant_location || 'N/A'],
               ['Merchant ID', transaction.merchant_id],
-              ['Card', `${transaction.card_id} ****${transaction.card_last4 || '****'}`],
+              ['UPI ID', transaction.upi_id || 'N/A'],
+              ['Card Network', transaction.card_network || 'N/A'],
+              ['Card', transaction.card_id ? `${transaction.card_id} ****${transaction.card_last4 || '****'}` : 'N/A'],
               ['Channel', transaction.channel || 'N/A'],
               ['Device ID', transaction.device_id || 'N/A'],
               ['IP Address', transaction.ip_address || 'N/A'],
@@ -88,7 +92,7 @@ export default function TransactionDetailPage() {
             ))}
           </AxiomaCard>
           <AxiomaCard title="Amount & Risk" subtitle="SCORE">
-            <div style={{ fontSize:36, fontFamily:'Fraunces, serif', fontWeight:700, color:'var(--accent)' }}>{transaction.currency || 'USD'} {transaction.amount.toFixed(2)}</div>
+            <div style={{ fontSize:36, fontFamily:'Fraunces, serif', fontWeight:700, color:'var(--accent)', overflowWrap:'anywhere' }}>{formatCurrency(transaction.amount, transaction.currency)}</div>
             <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'var(--fg-dim)', marginTop:4 }}>Transaction Amount</div>
             <div style={{ marginTop:24, fontSize:36, fontFamily:'Fraunces, serif', fontWeight:700, color:riskColor }}>{transaction.fraud_score.toFixed(3)}</div>
             <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'var(--fg-dim)', marginTop:4 }}>Fraud Score</div>

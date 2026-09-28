@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime
-from backend.app import create_app, db
-from backend.app.models import User, Transaction
-from backend.app.utils.validators import validate_transaction_input, validate_amount
+from app import create_app, db
+from app.models import User, Transaction
+from app.utils.validators import validate_transaction_input, validate_amount
 
 
 @pytest.fixture
@@ -44,6 +44,7 @@ class TestTransactions:
                 'customer_id': 'CUST001',
                 'merchant_id': 'MERCH001',
                 'card_id': 'CARD001',
+                'card_network': 'Visa',
                 'amount': 150.50,
                 'merchant_name': 'Online Store',
                 'category': 'shopping'
@@ -53,7 +54,75 @@ class TestTransactions:
         assert response.status_code == 201
         data = response.get_json()
         assert data['transaction']['amount'] == 150.50
+        assert data['transaction']['card_network'] == 'Visa'
         assert 'fraud_score' in data['transaction']
+
+    def test_card_network_must_be_supported(self, client, authenticated_user):
+        response = client.post(
+            '/api/transactions',
+            json={
+                'customer_id': 'CUST_CARD',
+                'merchant_id': 'MERCH_CARD',
+                'card_id': 'CARD001',
+                'card_network': 'Unknown Network',
+                'amount': 500,
+                'channel': 'Card',
+            },
+            headers={'Authorization': f'Bearer {authenticated_user}'}
+        )
+        assert response.status_code == 400
+        assert 'card_network must be Visa, RuPay, Mastercard, or American Express' in response.get_json()['errors']
+
+    def test_create_upi_transaction(self, client, authenticated_user):
+        response = client.post(
+            '/api/transactions',
+            json={
+                'customer_id': 'CUST_UPI',
+                'merchant_id': 'MERCH_UPI',
+                'amount': 1250.00,
+                'channel': 'UPI',
+                'upi_id': 'customer@okaxis',
+                'payer_bank': 'Axis Bank',
+                'merchant_bank': 'HDFC Bank',
+            },
+            headers={'Authorization': f'Bearer {authenticated_user}'}
+        )
+        assert response.status_code == 201
+        transaction = response.get_json()['transaction']
+        assert transaction['currency'] == 'INR'
+        assert transaction['card_id'] == ''
+        assert transaction['upi_id'] == 'customer@okaxis'
+        assert transaction['payer_bank'] == 'Axis Bank'
+        assert transaction['merchant_bank'] == 'HDFC Bank'
+
+    def test_upi_transaction_requires_valid_upi_id(self, client, authenticated_user):
+        response = client.post(
+            '/api/transactions',
+            json={
+                'customer_id': 'CUST_UPI',
+                'merchant_id': 'MERCH_UPI',
+                'amount': 1250.00,
+                'channel': 'UPI',
+                'upi_id': 'not-a-upi-id',
+            },
+            headers={'Authorization': f'Bearer {authenticated_user}'}
+        )
+        assert response.status_code == 400
+        assert 'upi_id must be a valid UPI address' in response.get_json()['errors']
+        assert 'payer_bank is required for UPI transactions' in response.get_json()['errors']
+
+    def test_dashboard_amounts_are_grouped_by_currency(self, client, authenticated_user):
+        headers = {'Authorization': f'Bearer {authenticated_user}'}
+        for transaction in [
+            {'customer_id': 'CUST_INR', 'merchant_id': 'MERCH_INR', 'card_id': 'CARD_INR', 'amount': 500, 'currency': 'INR'},
+            {'customer_id': 'CUST_USD', 'merchant_id': 'MERCH_USD', 'card_id': 'CARD_USD', 'amount': 20, 'currency': 'USD'},
+        ]:
+            response = client.post('/api/transactions', json=transaction, headers=headers)
+            assert response.status_code == 201
+
+        response = client.get('/api/dashboard/stats', headers=headers)
+        assert response.status_code == 200
+        assert response.get_json()['amount_by_currency'] == {'INR': 500.0, 'USD': 20.0}
 
     def test_list_transactions(self, client, authenticated_user):
         """Test listing transactions."""

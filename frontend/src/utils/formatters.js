@@ -21,14 +21,25 @@ export function formatCompactNumber(value) {
   return `${compactValue}${unit.suffix}`
 }
 
-export function formatINR(value) {
+export function formatCurrency(value, currency = 'INR') {
   const number = Number(value)
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(number) ? number : 0)
+  const safeValue = Number.isFinite(number) ? number : 0
+  const currencyCode = String(currency || 'INR').toUpperCase()
+
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(safeValue)
+  } catch {
+    return `${currencyCode} ${formatNumber(safeValue)}`
+  }
+}
+
+export function formatINR(value) {
+  return formatCurrency(value, 'INR')
 }
 
 export function formatCompactINR(value) {

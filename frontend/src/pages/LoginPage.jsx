@@ -22,9 +22,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-6">🔐 Fraud Detection</h1>
+    <div className="login-page min-h-screen flex items-center justify-center p-4">
+      <div className="login-panel rounded-lg shadow-lg p-8 w-full max-w-md">
+        <h1 className="text-3xl font-bold text-center mb-6">Fraud Detection</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -70,7 +70,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="login-submit w-full py-2 rounded-lg font-medium disabled:opacity-50"
           >
             {loading ? 'Loading...' : isLogin ? 'Login' : 'Register'}
           </button>
@@ -80,7 +80,7 @@ export default function LoginPage() {
           {isLogin ? "Don't have an account? " : 'Already have an account? '}
           <button
             onClick={() => setIsLogin(!isLogin)}
-            className="text-blue-600 font-medium hover:underline"
+            className="login-link font-medium hover:underline"
           >
             {isLogin ? 'Register' : 'Login'}
           </button>

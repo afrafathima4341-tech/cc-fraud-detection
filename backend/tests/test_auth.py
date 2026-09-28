@@ -1,6 +1,6 @@
 import pytest
-from backend.app import create_app, db
-from backend.app.models import User
+from app import create_app, db, socketio
+from app.models import User
 
 
 @pytest.fixture
@@ -22,6 +22,34 @@ def client(app):
 
 class TestAuthentication:
     """Test authentication endpoints."""
+
+    def test_socket_auth_receives_live_events(self, app, client):
+        register_response = client.post('/api/auth/register', json={
+            'email': 'socket@example.com',
+            'username': 'socketuser',
+            'password': 'SecurePass123'
+        })
+        token = register_response.get_json()['access_token']
+        socket_client = socketio.test_client(app, auth={'token': token})
+
+        assert socket_client.is_connected()
+        assert any(event['name'] == 'connection' for event in socket_client.get_received())
+
+        socket_client.emit('join_alerts')
+        assert any(event['name'] == 'alert_room_joined' for event in socket_client.get_received())
+
+        socketio.emit('transaction_update', {'id': 10}, room='user_1')
+        assert any(
+            event['name'] == 'transaction_update' and event['args'][0]['id'] == 10
+            for event in socket_client.get_received()
+        )
+
+        socketio.emit('fraud_alert', {'alert_id': 20}, room='alerts_1')
+        assert any(
+            event['name'] == 'fraud_alert' and event['args'][0]['alert_id'] == 20
+            for event in socket_client.get_received()
+        )
+        socket_client.disconnect()
 
     def test_register_user(self, client):
         """Test user registration."""

@@ -4,6 +4,16 @@ import api from '../services/api'
 import { useToast } from '../components/Toast'
 import AxiomaSection from '../components/AxiomaSection'
 import AxiomaCard from '../components/AxiomaCard'
+import { formatCurrency } from '../utils/formatters'
+
+const paymentChannels = ['UPI', 'Card', 'Net Banking', 'Wallet', 'POS']
+const cardNetworks = ['Visa', 'RuPay', 'Mastercard', 'American Express']
+const indianBanks = [
+  'State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank',
+  'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+  'Bank of India', 'Indian Bank', 'IDFC FIRST Bank', 'IndusInd Bank', 'Yes Bank',
+  'Federal Bank', 'AU Small Finance Bank',
+]
 
 export default function TransactionsPage() {
   const navigate = useNavigate()
@@ -17,16 +27,43 @@ export default function TransactionsPage() {
     merchant_id: '',
     card_id: '',
     card_last4: '',
+    card_network: '',
+    upi_id: '',
+    payer_bank: '',
     amount: '',
     merchant_name: '',
     merchant_bank: '',
     merchant_location: '',
     category: '',
-    channel: '',
-    currency: 'USD',
+    channel: 'UPI',
+    currency: 'INR',
     ip_address: '',
     device_id: '',
   })
+  const cardPayment = ['Card', 'POS'].includes(newTx.channel)
+  const upiPayment = newTx.channel === 'UPI'
+  const fields = [
+    { key: 'customer_id', label: 'Customer ID', type: 'text', required: true },
+    { key: 'merchant_id', label: 'Merchant ID', type: 'text', required: true },
+    { key: 'amount', label: 'Amount (INR)', type: 'number', required: true, min: '0', step: '0.01' },
+    { key: 'channel', label: 'Payment Method', type: 'options', required: true, options: paymentChannels },
+    ...(upiPayment ? [
+      { key: 'upi_id', label: 'UPI ID', type: 'text', required: true, placeholder: 'name@bank' },
+      { key: 'payer_bank', label: 'Payer Bank', type: 'bank', required: true },
+    ] : []),
+    ...(cardPayment ? [
+      { key: 'card_id', label: 'Card ID', type: 'text', required: true },
+      { key: 'card_last4', label: 'Card Last 4', type: 'text', placeholder: '1234' },
+      { key: 'card_network', label: 'Card Network', type: 'network', required: true, options: cardNetworks },
+    ] : []),
+    { key: 'merchant_name', label: 'Merchant Name', type: 'text' },
+    { key: 'merchant_bank', label: 'Merchant Bank', type: 'bank' },
+    { key: 'merchant_location', label: 'Merchant Location', type: 'text' },
+    { key: 'category', label: 'Category', type: 'text' },
+    { key: 'ip_address', label: 'IP Address', type: 'text' },
+    { key: 'device_id', label: 'Device ID', type: 'text' },
+    { key: 'currency', label: 'Settlement Currency', type: 'static', value: 'INR' },
+  ]
 
   useEffect(() => {
     fetchTransactions()
@@ -58,7 +95,13 @@ export default function TransactionsPage() {
     try {
       await api.post('/transactions', {
         ...newTx,
+        card_id: cardPayment ? newTx.card_id : '',
+        card_last4: cardPayment ? newTx.card_last4 : '',
+        card_network: cardPayment ? newTx.card_network : '',
+        upi_id: upiPayment ? newTx.upi_id : '',
+        payer_bank: upiPayment ? newTx.payer_bank : '',
         amount: parseFloat(newTx.amount),
+        currency: 'INR',
         timestamp: new Date().toISOString(),
       })
       setNewTx({
@@ -66,13 +109,16 @@ export default function TransactionsPage() {
         merchant_id: '',
         card_id: '',
         card_last4: '',
+        card_network: '',
+        upi_id: '',
+        payer_bank: '',
         amount: '',
         merchant_name: '',
         merchant_bank: '',
         merchant_location: '',
         category: '',
-        channel: '',
-        currency: 'USD',
+        channel: 'UPI',
+        currency: 'INR',
         ip_address: '',
         device_id: '',
       })
@@ -116,29 +162,34 @@ export default function TransactionsPage() {
         )}
         <AxiomaCard title="Add New Transaction" subtitle="LIVE INPUT">
           <form onSubmit={handleAddTransaction} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16 }}>
-          {[
-            {key:'customer_id', ph:'Customer ID', type:'text', req:true},
-            {key:'merchant_id', ph:'Merchant ID', type:'text', req:true},
-            {key:'card_id', ph:'Card ID', type:'text', req:true},
-            {key:'card_last4', ph:'Card Last 4', type:'text'},
-            {key:'amount', ph:'Amount', type:'number', req:true},
-            {key:'currency', ph:'Currency', type:'select', options:['USD','EUR','GBP']},
-            {key:'merchant_name', ph:'Merchant Name', type:'text'},
-            {key:'merchant_bank', ph:'Merchant Bank', type:'text'},
-            {key:'merchant_location', ph:'Merchant Location', type:'text'},
-            {key:'category', ph:'Category', type:'text'},
-            {key:'channel', ph:'Channel', type:'text'},
-            {key:'ip_address', ph:'IP Address', type:'text'},
-            {key:'device_id', ph:'Device ID', type:'text'},
-          ].map(f => (
-            <div key={f.key}>
-              <label style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--muted)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6, display:'block' }}>{f.ph}</label>
-              {f.type==='select' ? (
-                <select value={newTx[f.key]} onChange={e=>setNewTx({...newTx,[f.key]:e.target.value})} style={{ width:'100%', padding:'10px 12px', background:'var(--bg-card-2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--fg)' }}>
-                  {f.options.map(o=><option key={o}>{o}</option>)}
+          {fields.map((field) => (
+            <div key={field.key}>
+              <label htmlFor={`newtx-${field.key}`} style={{ fontFamily:'JetBrains Mono, monospace', fontSize:10, color:'var(--muted)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6, display:'block' }}>{field.label}</label>
+              {field.type === 'options' || field.type === 'bank' || field.type === 'network' ? (
+                <select
+                  id={`newtx-${field.key}`}
+                  value={newTx[field.key]}
+                  required={field.required}
+                  onChange={(event) => setNewTx((current) => ({ ...current, [field.key]: event.target.value }))}
+                  style={{ width:'100%', padding:'10px 12px', background:'var(--bg-card-2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--fg)' }}
+                >
+                  <option value="">{field.type === 'bank' ? 'Select a bank' : field.type === 'network' ? 'Select a card network' : 'Select a payment method'}</option>
+                  {(field.type === 'bank' ? indianBanks : field.options).map((option) => <option key={option} value={option}>{option}</option>)}
                 </select>
+              ) : field.type === 'static' ? (
+                <div id={`newtx-${field.key}`} style={{ padding:'10px 12px', color:'var(--fg)', background:'var(--bg-card-2)', border:'1px solid var(--border)', borderRadius:8 }}>{field.value}</div>
               ) : (
-                <input type={f.type} placeholder={f.ph} value={newTx[f.key]} onChange={e=>setNewTx({...newTx,[f.key]:e.target.value})} required={f.req} style={{ width:'100%', padding:'10px 12px', background:'var(--bg-card-2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--fg)' }} />
+                <input
+                  id={`newtx-${field.key}`}
+                  type={field.type}
+                  placeholder={field.placeholder || field.label}
+                  value={newTx[field.key]}
+                  onChange={(event) => setNewTx((current) => ({ ...current, [field.key]: event.target.value }))}
+                  required={field.required}
+                  min={field.min}
+                  step={field.step}
+                  style={{ width:'100%', padding:'10px 12px', background:'var(--bg-card-2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--fg)' }}
+                />
               )}
             </div>
           ))}
@@ -166,7 +217,7 @@ export default function TransactionsPage() {
                   <tr key={tx.id} onClick={()=>navigate(`/transactions/${tx.id}`)} style={{ borderBottom:'1px solid var(--border)', cursor:'pointer' }} onMouseOver={e=>e.currentTarget.style.background='var(--bg-card-2)'} onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                     <td style={{ padding:'14px 16px', fontFamily:'JetBrains Mono, monospace', fontSize:13 }}>{tx.customer_id}</td>
                     <td style={{ padding:'14px 16px' }}>{tx.merchant_name}</td>
-                    <td style={{ padding:'14px 16px', fontWeight:600 }}>{tx.currency||'USD'} {tx.amount.toFixed(2)}</td>
+                    <td style={{ padding:'14px 16px', fontWeight:600 }}>{formatCurrency(tx.amount, tx.currency)}</td>
                     <td style={{ padding:'14px 16px', fontFamily:'JetBrains Mono, monospace' }}>{tx.fraud_score.toFixed(3)}</td>
                     <td style={{ padding:'14px 16px' }}>
                       <span style={{ padding:'4px 10px', borderRadius:999, fontSize:12, background: tx.is_fraud_predicted ? 'rgba(255,94,98,0.15)' : 'rgba(77,212,172,0.15)', color: tx.is_fraud_predicted ? 'var(--accent-2)' : 'var(--accent-3)', fontWeight:600 }}>
