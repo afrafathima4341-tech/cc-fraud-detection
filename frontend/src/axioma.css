@@ -14,6 +14,164 @@
   --border-strong: rgba(240, 235, 225, 0.18);
 }
 
+.axioma-nav {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 14, 20, 0.88);
+  backdrop-filter: blur(20px);
+}
+.axioma-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+  font-family: 'Fraunces', serif;
+  font-size: 20px;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.axioma-nav__mark {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  transform: rotate(-8deg);
+}
+.axioma-nav__links,
+.axioma-nav__account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.axioma-nav__link {
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg-dim);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.axioma-nav__link:hover,
+.axioma-nav__link.is-active {
+  border-color: var(--border);
+  background: var(--bg-card);
+  color: var(--fg);
+}
+.axioma-nav__link.is-active {
+  box-shadow: inset 2px 0 var(--accent);
+}
+.axioma-nav__account {
+  gap: 14px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+.axioma-nav__username {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--fg-dim);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.axioma-nav__signout {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 13px;
+}
+.axioma-nav__signout:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+.axioma-nav__toggle,
+.axioma-nav__mobile-menu {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .axioma-nav {
+    min-height: 64px;
+    padding: 0 20px;
+  }
+  .axioma-nav__links,
+  .axioma-nav__account {
+    display: none;
+  }
+  .axioma-nav__toggle {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--fg);
+    cursor: pointer;
+    font-size: 20px;
+  }
+  .axioma-nav__mobile-menu {
+    position: fixed;
+    inset: 64px 0 0;
+    z-index: 99;
+    display: block;
+  }
+  .axioma-nav__backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: rgba(4, 5, 8, 0.68);
+    cursor: default;
+  }
+  .axioma-nav__mobile-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(320px, calc(100% - 40px));
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 20px;
+    border-left: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.28);
+  }
+  .axioma-nav__mobile-links {
+    display: grid;
+    gap: 6px;
+  }
+  .axioma-nav__mobile-links .axioma-nav__link {
+    padding: 14px 12px;
+  }
+  .axioma-nav__mobile-account {
+    display: grid;
+    gap: 14px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  .axioma-nav__mobile-account .axioma-nav__signout {
+    text-align: left;
+  }
+}
+
 .atmosphere {
   position: fixed;
   inset: 0;
@@ -111,6 +269,7 @@
 }
 
 .readout {
+  min-width: 0;
   background: var(--bg-card-2);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -125,10 +284,14 @@
   margin-bottom: 6px;
 }
 .readout-value {
+  min-width: 0;
+  overflow: hidden;
   font-family: 'Fraunces', serif;
   font-size: 28px;
   font-weight: 600;
   line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-dot {

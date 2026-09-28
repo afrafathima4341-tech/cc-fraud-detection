@@ -13,6 +13,7 @@ import AxiomaSection from '../components/AxiomaSection'
 import AxiomaCard from '../components/AxiomaCard'
 import AxiomaReadout from '../components/AxiomaReadout'
 import AxiomaBadge from '../components/AxiomaBadge'
+import { formatCompactINR, formatCompactNumber, formatINR, formatNumber } from '../utils/formatters'
 
 const timeRanges = [
   {label:'24h', value:'1'},
@@ -348,7 +349,12 @@ export default function DashboardPage() {
         {/* Key Metrics */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16, margin: '32px 0' }}>
           <AxiomaCard>
-            <AxiomaReadout label="Total Transactions" value={stats.total_transactions} />
+            <AxiomaReadout
+              label="Total Transactions"
+              value={formatCompactNumber(stats.total_transactions)}
+              title={formatNumber(stats.total_transactions)}
+              ariaLabel={`${formatNumber(stats.total_transactions)} total transactions`}
+            />
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--fg-dim)', marginTop: 8 }}>+{stats.transactions_24h} today</div>
           </AxiomaCard>
           <AxiomaCard>
@@ -360,8 +366,13 @@ export default function DashboardPage() {
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--fg-dim)', marginTop: 8 }}>of all transactions</div>
           </AxiomaCard>
           <AxiomaCard>
-            <AxiomaReadout label="Total Amount" value={`$${stats.total_amount.toFixed(2)}`} />
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--accent-2)', marginTop: 8 }}>${stats.fraud_amount.toFixed(2)} fraud</div>
+            <AxiomaReadout
+              label="Total Amount"
+              value={formatCompactINR(stats.total_amount)}
+              title={formatINR(stats.total_amount)}
+              ariaLabel={formatINR(stats.total_amount)}
+            />
+            <div title={formatINR(stats.fraud_amount)} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--accent-2)', marginTop: 8 }}>{formatCompactINR(stats.fraud_amount)} fraud</div>
           </AxiomaCard>
         </div>
 

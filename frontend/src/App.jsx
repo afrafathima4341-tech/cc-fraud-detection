@@ -5,7 +5,6 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailPage from './pages/TransactionDetailPage'
-import Navbar from './components/Navbar'
 import AxiomaNav from './components/AxiomaNav'
 import AlertNotification from './components/AlertNotification'
 import ToastContainer from './components/Toast'
@@ -22,7 +21,6 @@ function App() {
       <div className="atmosphere" />
       <ToastContainer />
       {user && <AxiomaNav />}
-      {user && <Navbar />}
       {user && <AlertNotification />}
       <Routes>
         <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/dashboard" />} />
