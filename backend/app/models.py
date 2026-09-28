@@ -1,5 +1,5 @@
-from datetime import datetime
-from backend.app import db
+from datetime import datetime, timezone
+from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(db.Model):
@@ -9,8 +9,8 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     transactions = db.relationship("Transaction", backref="user", lazy=True, cascade="all, delete-orphan")
     fraud_alerts = db.relationship("FraudAlert", backref="user", lazy=True, cascade="all, delete-orphan")
@@ -40,12 +40,19 @@ class Transaction(db.Model):
     card_id = db.Column(db.String(50), nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     merchant_name = db.Column(db.String(255), nullable=True)
+    merchant_bank = db.Column(db.String(255), nullable=True)
+    merchant_location = db.Column(db.String(255), nullable=True)
     category = db.Column(db.String(50), nullable=True)
+    card_last4 = db.Column(db.String(4), nullable=True)
+    channel = db.Column(db.String(50), nullable=True)
+    currency = db.Column(db.String(10), default='USD')
+    ip_address = db.Column(db.String(50), nullable=True)
+    device_id = db.Column(db.String(100), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False)
     is_fraud_predicted = db.Column(db.Boolean, default=False, index=True)
     fraud_score = db.Column(db.Float, default=0.0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     fraud_alert = db.relationship("FraudAlert", backref="transaction", uselist=False, cascade="all, delete-orphan")
 
@@ -55,7 +62,14 @@ class Transaction(db.Model):
             "customer_id": self.customer_id,
             "merchant_id": self.merchant_id,
             "merchant_name": self.merchant_name,
+            "merchant_bank": self.merchant_bank,
+            "merchant_location": self.merchant_location,
             "card_id": self.card_id,
+            "card_last4": self.card_last4,
+            "channel": self.channel,
+            "currency": self.currency,
+            "ip_address": self.ip_address,
+            "device_id": self.device_id,
             "amount": self.amount,
             "category": self.category,
             "timestamp": self.timestamp.isoformat(),
@@ -75,8 +89,8 @@ class FraudAlert(db.Model):
     is_confirmed = db.Column(db.Boolean, default=False)
     is_false_positive = db.Column(db.Boolean, default=False)
     explanation = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -101,8 +115,8 @@ class GraphEdge(db.Model):
     edge_type = db.Column(db.String(50), nullable=False)
     weight = db.Column(db.Float, default=1.0)
     transaction_count = db.Column(db.Integer, default=1)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (db.Index("idx_graph_edge", "source_id", "target_id", "edge_type"),)
 

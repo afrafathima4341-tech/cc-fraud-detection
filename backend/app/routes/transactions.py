@@ -1,10 +1,10 @@
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, and_
-from backend.app import db, socketio
-from backend.app.models import Transaction, FraudAlert
-from backend.app.utils.validators import validate_transaction_input
+from app import db, socketio
+from app.models import Transaction, FraudAlert
+from app.utils.validators import validate_transaction_input
 
 
 def _get_risk_level(fraud_score):
@@ -117,15 +117,22 @@ def create_transaction():
             card_id=data["card_id"],
             amount=float(data["amount"]),
             merchant_name=data.get("merchant_name"),
+            merchant_bank=data.get("merchant_bank"),
+            merchant_location=data.get("merchant_location"),
             category=data.get("category"),
-            timestamp=datetime.fromisoformat(data.get("timestamp", datetime.utcnow().isoformat())),
+            card_last4=data.get("card_last4"),
+            channel=data.get("channel"),
+            currency=data.get("currency", "USD"),
+            ip_address=data.get("ip_address"),
+            device_id=data.get("device_id"),
+            timestamp=datetime.fromisoformat(data.get("timestamp", datetime.now(timezone.utc).isoformat())),
         )
 
         db.session.add(transaction)
         db.session.flush()
 
-        from backend.app.services.fraud_detector import detect_fraud
-        from backend.app.websocket_events import broadcast_fraud_alert, broadcast_transaction_update
+        from app.services.fraud_detector import detect_fraud
+        from app.websocket_events import broadcast_fraud_alert, broadcast_transaction_update
 
         fraud_score, explanation = detect_fraud(transaction)
         transaction.fraud_score = fraud_score
@@ -151,12 +158,24 @@ def create_transaction():
             alert_data = {
                 "alert_id": fraud_alert.id,
                 "transaction_id": transaction.id,
-                "fraud_score": fraud_score,
-                "merchant": transaction.merchant_name,
+                "fraud_score": round(fraud_score, 3),
+                "risk_level": _get_risk_level(fraud_score),
                 "amount": transaction.amount,
+                "currency": transaction.currency,
                 "customer_id": transaction.customer_id,
+                "card_id": transaction.card_id,
+                "card_last4": transaction.card_last4,
+                "merchant_id": transaction.merchant_id,
+                "merchant_name": transaction.merchant_name,
+                "merchant_bank": transaction.merchant_bank,
+                "merchant_location": transaction.merchant_location,
+                "merchant_category": transaction.category,
+                "channel": transaction.channel,
+                "ip_address": transaction.ip_address,
+                "device_id": transaction.device_id,
                 "timestamp": transaction.timestamp.isoformat(),
-                "risk_level": _get_risk_level(fraud_score)
+                "created_at": transaction.created_at.isoformat(),
+                "explanation": explanation,
             }
             broadcast_fraud_alert(user_id, alert_data)
 
@@ -187,7 +206,7 @@ def get_transaction_analytics():
     else:
         days = 7
 
-    start_date = datetime.utcnow() - timedelta(days=days)
+    start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     transactions = Transaction.query.filter(
         Transaction.user_id == user_id,

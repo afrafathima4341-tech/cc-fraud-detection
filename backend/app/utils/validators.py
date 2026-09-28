@@ -54,6 +54,27 @@ def validate_transaction_input(data):
     if data.get("merchant_name") and len(str(data["merchant_name"])) > 255:
         errors.append("merchant_name too long")
 
+    if data.get("merchant_bank") and len(str(data["merchant_bank"])) > 255:
+        errors.append("merchant_bank too long")
+
+    if data.get("merchant_location") and len(str(data["merchant_location"])) > 255:
+        errors.append("merchant_location too long")
+
+    if data.get("card_last4") and not re.match(r'^\d{4}$', str(data["card_last4"])):
+        errors.append("card_last4 must be 4 digits")
+
+    if data.get("channel") and len(str(data["channel"])) > 50:
+        errors.append("channel too long")
+
+    if data.get("currency") and len(str(data["currency"])) > 10:
+        errors.append("currency too long")
+
+    if data.get("ip_address") and len(str(data["ip_address"])) > 50:
+        errors.append("ip_address too long")
+
+    if data.get("device_id") and len(str(data["device_id"])) > 100:
+        errors.append("device_id too long")
+
     if data.get("category") and len(str(data["category"])) > 50:
         errors.append("category too long")
 

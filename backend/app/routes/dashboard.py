@@ -1,9 +1,9 @@
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
-from datetime import datetime, timedelta
-from backend.app import db
-from backend.app.models import Transaction, FraudAlert, User
+from datetime import datetime, timedelta, timezone
+from app import db
+from app.models import Transaction, FraudAlert, User
 
 @jwt_required()
 def get_stats():
@@ -23,7 +23,7 @@ def get_stats():
     ).scalar() or 0.0
 
     # Calculate 24-hour change
-    yesterday = datetime.utcnow() - timedelta(days=1)
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     txns_24h = Transaction.query.filter(
         Transaction.user_id == user_id,
         Transaction.created_at >= yesterday
@@ -78,7 +78,7 @@ def get_trend_data():
     user_id = get_jwt_identity()
     days = request.args.get("days", 30, type=int)
 
-    start_date = datetime.utcnow() - timedelta(days=days)
+    start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Get daily stats
     daily_stats = db.session.query(

@@ -1,87 +1,52 @@
 import { useEffect, useState } from 'react'
-import { onFraudAlert, offFraudAlert } from '../services/websocket'
+import { useToast } from './Toast'
+import { onFraudAlert, connectWebSocket, disconnectWebSocket } from '../services/websocket'
+import { useAuthStore } from '../store/authStore'
 
 export default function AlertNotification() {
+  const { token } = useAuthStore()
+  const { addToast } = useToast()
   const [alerts, setAlerts] = useState([])
-  const [showNotifications, setShowNotifications] = useState(true)
 
   useEffect(() => {
-    const handleFraudAlert = (data) => {
-      console.log('Fraud alert received:', data)
-
-      const notification = {
-        id: data.alert_id,
-        timestamp: new Date(),
-        ...data,
-      }
-
-      setAlerts((prev) => [notification, ...prev].slice(0, 10))
-
-      // Auto-remove after 10 seconds
-      setTimeout(() => {
-        setAlerts((prev) => prev.filter((a) => a.id !== notification.id))
-      }, 10000)
-
-      // Play sound if available
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==')
-        audio.play()
-      } catch (e) {
-        console.log('Could not play alert sound')
-      }
+    if (!token) return
+    connectWebSocket(token)
+    const handleAlert = (alert) => {
+      setAlerts((prev) => [alert, ...prev].slice(0, 5))
+      addToast(`Fraud Alert: ${alert.merchant_name || alert.merchant} - ${alert.currency || 'USD'} ${alert.amount}`, 'error')
     }
-
-    onFraudAlert(handleFraudAlert)
-
+    onFraudAlert(handleAlert)
     return () => {
-      offFraudAlert(handleFraudAlert)
+      disconnectWebSocket()
     }
-  }, [])
+  }, [token, addToast])
 
-  const getRiskColor = (riskLevel) => {
-    switch (riskLevel) {
-      case 'CRITICAL':
-        return 'bg-red-600'
-      case 'HIGH':
-        return 'bg-red-500'
-      case 'MEDIUM':
-        return 'bg-orange-500'
-      case 'LOW':
-        return 'bg-yellow-500'
-      default:
-        return 'bg-blue-500'
-    }
-  }
+  if (alerts.length === 0) return null
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md space-y-3">
-      {alerts.map((alert) => (
-        <div
-          key={alert.id}
-          className={`${getRiskColor(alert.risk_level)} text-white p-4 rounded-lg shadow-lg transform transition-all duration-300 animate-pulse`}
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-bold text-lg">🚨 Fraud Alert Detected</h3>
-              <p className="text-sm mt-1">
-                <strong>Merchant:</strong> {alert.merchant}
-              </p>
-              <p className="text-sm">
-                <strong>Amount:</strong> ${alert.amount.toFixed(2)}
-              </p>
-              <p className="text-sm">
-                <strong>Risk Level:</strong> {alert.risk_level}
-              </p>
-              <p className="text-xs text-gray-100 mt-1">
-                Fraud Score: {alert.fraud_score.toFixed(3)}
-              </p>
-            </div>
-            <button
-              onClick={() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id))}
-              className="ml-2 text-white hover:text-gray-200 font-bold text-xl"
-            >
-              ×
-            </button>
+    <div style={{ position:'fixed', bottom:16, right:16, zIndex:50, width:380 }}>
+      {alerts.map((a,i)=>(
+        <div key={i} className="card" style={{ marginBottom:12, padding:16, background:'var(--bg-card)', border:'1px solid var(--accent-2)' }}>
+          <div style={{ fontFamily:'Fraunces, serif', fontWeight:800, fontSize:18, color:'var(--accent-2)' }}>Fraud Alert</div>
+          <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'var(--fg-dim)', marginTop:4 }}>{new Date(a.timestamp).toLocaleString()}</div>
+          <div style={{ marginTop:12, fontSize:14 }}>
+            {[
+              ['Tx ID', a.transaction_id],
+              ['Amount', `${a.currency||'USD'} ${a.amount}`],
+              ['Merchant', a.merchant_name||'N/A'],
+              ['Bank', a.merchant_bank||'N/A'],
+              ['Location', a.merchant_location||'N/A'],
+              ['Card', `**** ${a.card_last4||'****'}`],
+              ['Channel', a.channel||'N/A'],
+              ['IP', a.ip_address||'N/A'],
+              ['Device', a.device_id||'N/A'],
+              ['Risk', `${a.risk_level} (${a.fraud_score})`],
+            ].map(([k,v])=>(
+              <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+                <span style={{ color:'var(--fg-dim)', fontFamily:'JetBrains Mono, monospace', fontSize:11 }}>{k}</span>
+                <span style={{ fontWeight:500 }}>{v}</span>
+              </div>
+            ))}
           </div>
         </div>
       ))}

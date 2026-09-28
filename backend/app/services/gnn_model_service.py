@@ -73,14 +73,24 @@ class GNNModelService:
         if not self.is_model_available():
             return self._rule_based_detection(transaction_features)
 
+        # GNN models require graph structure (node features + edge_index).
+        # A single transaction in isolation has no edges, so we cannot run
+        # graph convolution. Fall back to rule-based unless we have graph data.
+        if self.graph_data is None:
+            print("GNN model loaded but no graph data available; using rule-based detection")
+            return self._rule_based_detection(transaction_features)
+
         try:
-            # Prepare features for the model
-            features = self._prepare_features(transaction_features)
+            # Build a mini-graph for this transaction using graph_data
+            graph_input = self._build_inference_graph(transaction_features)
+            if graph_input is None:
+                return self._rule_based_detection(transaction_features)
 
             # Run model prediction
             with torch.no_grad():
-                input_tensor = torch.FloatTensor(features).unsqueeze(0).to(self.device)
-                output = self.model(input_tensor, None)
+                input_tensor = torch.FloatTensor(graph_input["x"]).unsqueeze(0).to(self.device)
+                edge_index = torch.LongTensor(graph_input["edge_index"]).to(self.device)
+                output = self.model(input_tensor, edge_index)
                 fraud_score = output.item()
 
             explanation = {
@@ -96,21 +106,62 @@ class GNNModelService:
             print(f"Error in GNN prediction: {e}")
             return self._rule_based_detection(transaction_features)
 
-    def _prepare_features(self, transaction_data):
-        """Prepare transaction data for model input."""
-        # Create a feature vector (simplified version)
-        # In a real scenario, you'd use the full feature engineering pipeline
-        features = [
-            transaction_data.get("amount", 0),
-            transaction_data.get("hour", 0),
-            transaction_data.get("day", 0),
-        ]
+    def _build_inference_graph(self, transaction_data):
+        """
+        Build a minimal inference graph for a single transaction.
 
-        # Pad to expected input size
+        Uses the loaded graph_data to attach the new transaction as a node
+        connected to its customer, merchant, and card.
+
+        Returns:
+            dict with 'x' (node features) and 'edge_index' (edge pairs), or None
+        """
+        if not self.graph_data:
+            return None
+
+        node_maps = self.graph_data.get("node_maps", {})
+        customer_map = node_maps.get("customers", {})
+        merchant_map = node_maps.get("merchants", {})
+        card_map = node_maps.get("cards", {})
+
+        customer_id = transaction_data.get("customer_id")
+        merchant_id = transaction_data.get("merchant_id")
+        card_id = transaction_data.get("card_id")
+
+        # The new transaction becomes a new node
+        new_node = self.graph_data.get("num_nodes", 0)
+
+        # Build node features: amount + zero padding to expected input_dim
+        features = [float(transaction_data.get("amount", 0))]
         while len(features) < 29:
             features.append(0.0)
 
-        return np.array(features[:29], dtype=np.float32)
+        x = [np.array(features[:29], dtype=np.float32)]
+
+        edge_index = []
+
+        # Connect new node to known entities if they exist in the graph
+        if customer_id in customer_map:
+            c = customer_map[customer_id]
+            edge_index.append([c, new_node])
+            edge_index.append([new_node, c])
+        if merchant_id in merchant_map:
+            m = merchant_map[merchant_id]
+            edge_index.append([m, new_node])
+            edge_index.append([new_node, m])
+        if card_id in card_map:
+            c = card_map[card_id]
+            edge_index.append([c, new_node])
+            edge_index.append([new_node, c])
+
+        if not edge_index:
+            # No known entities — cannot run graph convolutions
+            return None
+
+        return {
+            "x": np.array(x, dtype=np.float32),
+            "edge_index": np.array(edge_index, dtype=np.int64).T,
+        }
 
     def _explain_prediction(self, transaction_data, fraud_score):
         """Generate explanation for the prediction."""
@@ -129,7 +180,7 @@ class GNNModelService:
 
     def _rule_based_detection(self, transaction_data):
         """Rule-based fraud detection (fallback when GNN not available)."""
-        from backend.app.models import Transaction
+        from app.models import Transaction
 
         fraud_score = 0.0
         reasons = []
@@ -161,7 +212,13 @@ class GNNModelService:
             fraud_score += 0.2
             reasons.append("Merchant has history of fraud transactions")
 
-        fraud_score = min(fraud_score + np.random.uniform(0, 0.1), 1.0)
+        # Deterministic score: hash the transaction identity so the same
+        # transaction always gets the same score across evaluations.
+        import hashlib
+        identity = f"{transaction_data.get('customer_id')}:{transaction_data.get('merchant_id')}:{transaction_data.get('card_id')}:{transaction_data.get('amount')}"
+        seed = int(hashlib.md5(identity.encode()).hexdigest(), 16) % 1000
+        jitter = (seed / 1000.0) * 0.05  # ±0.025 deterministic jitter
+        fraud_score = min(fraud_score + jitter, 1.0)
 
         explanation = {
             "model": "rule-based",

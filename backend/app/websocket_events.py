@@ -1,7 +1,8 @@
 from flask import request
 from flask_socketio import emit, join_room, leave_room
 from flask_jwt_extended import decode_token
-from backend.app import socketio
+from datetime import datetime, timezone
+from app import socketio
 import json
 
 # Store connected users
@@ -76,7 +77,7 @@ def on_leave_alerts():
 @socketio.on('ping')
 def handle_ping():
     """Handle ping/keep-alive."""
-    emit('pong', {'timestamp': datetime.utcnow().isoformat()})
+    emit('pong', {'timestamp': datetime.now(timezone.utc).isoformat()})
 
 
 def broadcast_fraud_alert(user_id, alert_data):
@@ -102,6 +103,3 @@ def broadcast_transaction_update(user_id, transaction_data):
 def get_connected_users():
     """Get list of connected users."""
     return list(set(connected_users.values()))
-
-
-from datetime import datetime

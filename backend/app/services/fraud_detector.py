@@ -1,4 +1,4 @@
-from backend.app.services.gnn_model_service import get_model_service
+from app.services.gnn_model_service import get_model_service
 
 def detect_fraud(transaction):
     """

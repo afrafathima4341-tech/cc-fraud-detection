@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import os
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -12,22 +13,32 @@ socketio = SocketIO()
 def create_app(config_name="development"):
     app = Flask(__name__)
 
-    from backend.app.config import config
+    from app.config import config
     app.config.from_object(config[config_name])
+
+    # Initialize config hooks
+    config[config_name].init_app(app)
 
     db.init_app(app)
     jwt.init_app(app)
-    CORS(app)
-    socketio.init_app(app, cors_allowed_origins="*")
+
+    # Restrict CORS to configured origins in production
+    cors_origins = app.config.get("CORS_ALLOWED_ORIGINS")
+    if not cors_origins:
+        cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+    CORS(app, origins=cors_origins if cors_origins != "*" else "*")
+
+    socketio.init_app(app, cors_allowed_origins=cors_origins if cors_origins != "*" else "*")
+
+    from app import models  # Import models
+    from app.routes import auth_bp, transactions_bp, fraud_alerts_bp, dashboard_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(transactions_bp)
+    app.register_blueprint(fraud_alerts_bp)
+    app.register_blueprint(dashboard_bp)
 
     with app.app_context():
-        from backend.app import models
         db.create_all()
-
-        from backend.app.routes import auth_bp, transactions_bp, fraud_alerts_bp, dashboard_bp
-        app.register_blueprint(auth_bp)
-        app.register_blueprint(transactions_bp)
-        app.register_blueprint(fraud_alerts_bp)
-        app.register_blueprint(dashboard_bp)
 
     return app

@@ -1,0 +1,183 @@
+:root {
+  --bg: #0d0e14;
+  --bg-elev: #15171f;
+  --bg-card: #1a1d28;
+  --bg-card-2: #21242f;
+  --fg: #f0ebe1;
+  --fg-dim: #a8a496;
+  --muted: #6b6d7a;
+  --accent: #d4ff3a;
+  --accent-2: #ff5e62;
+  --accent-3: #4dd4ac;
+  --accent-4: #ffb627;
+  --border: rgba(240, 235, 225, 0.08);
+  --border-strong: rgba(240, 235, 225, 0.18);
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.atmosphere::before {
+  content: '';
+  position: absolute;
+  top: -20%; left: -10%;
+  width: 60%; height: 60%;
+  background: radial-gradient(circle, rgba(212, 255, 58, 0.08) 0%, transparent 60%);
+  filter: blur(60px);
+}
+.atmosphere::after {
+  content: '';
+  position: absolute;
+  bottom: -20%; right: -10%;
+  width: 50%; height: 50%;
+  background: radial-gradient(circle, rgba(255, 94, 98, 0.06) 0%, transparent 60%);
+  filter: blur(60px);
+}
+
+.bg-grid {
+  background-image: 
+    linear-gradient(rgba(240, 235, 225, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 235, 225, 0.035) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.bg-grid-fine {
+  background-image: 
+    linear-gradient(rgba(240, 235, 225, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 235, 225, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.nav-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-4));
+  z-index: 100;
+  transition: width 0.05s linear;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.4;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 10px;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 40px -8px rgba(212, 255, 58, 0.5);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--fg);
+  font-weight: 500;
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-secondary:hover {
+  background: var(--bg-card);
+  border-color: var(--fg-dim);
+  transform: translateY(-2px);
+}
+
+.readout {
+  background: var(--bg-card-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.readout-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.readout-value {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+  margin-right: 8px;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  animation: livePulse 2s infinite;
+}
+@keyframes livePulse {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.section-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 32px;
+  align-items: end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+.section-title {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.section-kicker {
+  color: var(--fg-dim);
+  max-width: 360px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: right;
+}

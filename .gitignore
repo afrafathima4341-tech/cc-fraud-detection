@@ -60,3 +60,5 @@ Thumbs.db
 ml/models/*.pt
 ml/models/*.pkl
 ml/data/kaggle_dataset/
+
+.claude

@@ -5,7 +5,7 @@ transactions_bp = Blueprint("transactions", __name__, url_prefix="/api/transacti
 fraud_alerts_bp = Blueprint("fraud_alerts", __name__, url_prefix="/api/fraud-alerts")
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
-from backend.app.routes import auth, transactions, fraud_alerts, dashboard
+from app.routes import auth, transactions, fraud_alerts, dashboard
 
 auth_bp.add_url_rule("/register", "register", auth.register, methods=["POST"])
 auth_bp.add_url_rule("/login", "login", auth.login, methods=["POST"])

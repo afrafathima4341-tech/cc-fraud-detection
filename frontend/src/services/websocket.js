@@ -3,9 +3,13 @@ import { io } from 'socket.io-client'
 let socket = null
 
 export const connectWebSocket = (token) => {
-  socket = io('http://localhost:5000', {
-    query: {
-      token: token,
+  const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000'
+  socket = io(wsUrl, {
+    extraHeaders: {
+      Authorization: `Bearer ${token}`,
+    },
+    auth: {
+      token,
     },
     transports: ['websocket', 'polling'],
   })

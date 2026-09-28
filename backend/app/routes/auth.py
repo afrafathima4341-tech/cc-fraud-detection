@@ -1,13 +1,24 @@
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from backend.app import db
-from backend.app.models import User
+from app import db
+from app.models import User
+from app.utils.validators import validate_email, validate_password
+
 
 def register():
     data = request.get_json()
 
     if not data or not data.get("email") or not data.get("password") or not data.get("username"):
         return jsonify({"message": "Missing required fields"}), 400
+
+    # Validate email format
+    if not validate_email(data["email"]):
+        return jsonify({"message": "Invalid email format"}), 400
+
+    # Validate password strength
+    valid, msg = validate_password(data["password"])
+    if not valid:
+        return jsonify({"message": msg}), 400
 
     if User.query.filter_by(email=data["email"]).first():
         return jsonify({"message": "Email already exists"}), 409
@@ -21,7 +32,7 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
 
     return jsonify({
         "message": "User registered successfully",
@@ -41,7 +52,7 @@ def login():
     if not user or not user.check_password(data["password"]):
         return jsonify({"message": "Invalid email or password"}), 401
 
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
 
     return jsonify({
         "message": "Login successful",

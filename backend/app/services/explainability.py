@@ -3,8 +3,8 @@ Explainability module for fraud detection predictions.
 Provides interpretable explanations for why a transaction was flagged as fraudulent.
 """
 
-from backend.app.models import Transaction, FraudAlert
-from datetime import timedelta
+from app.models import Transaction, FraudAlert
+from datetime import timedelta, timezone, datetime
 from sqlalchemy import func
 
 class FraudExplainer:

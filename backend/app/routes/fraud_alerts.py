@@ -2,9 +2,10 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from sqlalchemy import desc
-from backend.app import db
-from backend.app.models import FraudAlert, Transaction
-from backend.app.services.explainability import FraudExplainer
+from sqlalchemy.orm import joinedload
+from app import db
+from app.models import FraudAlert, Transaction
+from app.services.explainability import FraudExplainer
 
 @jwt_required()
 def list_fraud_alerts():
@@ -13,7 +14,11 @@ def list_fraud_alerts():
     per_page = request.args.get("per_page", 20, type=int)
     status_filter = request.args.get("status", None)  # confirmed, false_positive, unreviewed
 
-    query = FraudAlert.query.filter_by(user_id=user_id)
+    query = (
+        FraudAlert.query
+        .options(joinedload(FraudAlert.transaction))
+        .filter_by(user_id=user_id)
+    )
 
     if status_filter == "confirmed":
         query = query.filter_by(is_confirmed=True)
@@ -26,7 +31,6 @@ def list_fraud_alerts():
 
     alerts = query.order_by(desc(FraudAlert.created_at)).paginate(page=page, per_page=per_page)
 
-    # Include transaction details with each alert
     alerts_with_tx = []
     for alert in alerts.items:
         alert_dict = alert.to_dict()
