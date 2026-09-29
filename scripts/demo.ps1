@@ -113,7 +113,12 @@ try {
 
     if (-not (Test-TcpPort -Port 5174)) {
         $frontendDirectory = Join-Path $repoRoot 'frontend'
-        $npmCommand = if ($isWindows) { Get-Command npm.cmd -ErrorAction SilentlyContinue } else { Get-Command npm -ErrorAction SilentlyContinue }
+        $npmCommand = if ($isWindows) {
+            Get-Command npm.cmd, npm.exe, npm -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+        else {
+            Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
         if (-not $npmCommand) { throw 'npm was not found. Install Node.js before running the demo.' }
 
         Write-Host 'Starting frontend...'
