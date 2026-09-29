@@ -31,16 +31,11 @@ function Test-TcpPort {
 }
 
 function Test-BackendReady {
-    try {
-        $null = Invoke-WebRequest -Uri "$apiBase/auth/login" -Method Get -TimeoutSec 2
-        return $false
-    }
-    catch {
-        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 405) {
-            return $true
-        }
-        return $false
-    }
+    $curlCommand = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if (-not $curlCommand) { return $false }
+
+    $statusCode = & $curlCommand.Source -sS --max-time 2 -o NUL -w '%{http_code}' "$apiBase/auth/login" 2>$null
+    return ($LASTEXITCODE -eq 0 -and "$statusCode".Trim() -eq '405')
 }
 
 function Stop-OwnedProcess {
@@ -87,8 +82,13 @@ function Submit-DemoTransaction {
 
 try {
     Write-Host '=== AXIOMA Real-time Fraud Demo ==='
+    Write-Host 'Starting backend and frontend...'
 
-    if (-not (Test-TcpPort -Port 5000)) {
+    if (-not (Test-BackendReady)) {
+        if (Test-TcpPort -Port 5000) {
+            throw 'Port 5000 is occupied, but the backend did not return HTTP 405 from /api/auth/login.'
+        }
+
         $backendDirectory = Join-Path $repoRoot 'backend'
         $pythonCandidates = @(
             (Join-Path $backendDirectory 'venv/Scripts/python.exe'),
