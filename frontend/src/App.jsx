@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailPage from './pages/TransactionDetailPage'
+import CasesPage from './pages/CasesPage'
 import AxiomaNav from './components/AxiomaNav'
 import AlertNotification from './components/AlertNotification'
 import ToastContainer from './components/Toast'
@@ -27,6 +28,7 @@ function App() {
         <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/login" />} />
         <Route path="/transactions" element={user ? <TransactionsPage /> : <Navigate to="/login" />} />
         <Route path="/transactions/:transactionId" element={user ? <TransactionDetailPage /> : <Navigate to="/login" />} />
+        <Route path="/cases" element={user ? <CasesPage /> : <Navigate to="/login" />} />
         <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
       </Routes>
       <style>{`

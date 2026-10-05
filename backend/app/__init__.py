@@ -33,12 +33,13 @@ def create_app(config_name="development"):
 
     from app import models  # Import models
     from app import websocket_events
-    from app.routes import auth_bp, transactions_bp, fraud_alerts_bp, dashboard_bp
+    from app.routes import auth_bp, transactions_bp, fraud_alerts_bp, dashboard_bp, cases_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(fraud_alerts_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(cases_bp)
 
     with app.app_context():
         db.create_all()

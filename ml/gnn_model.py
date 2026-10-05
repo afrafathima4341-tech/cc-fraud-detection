@@ -1,13 +1,66 @@
+"""
+Lightweight Graph Convolution and Graph Neural Network architecture for Fraud Detection.
+Uses pure PyTorch (and optional torch_geometric when available) with residual GCN/GraphSAGE layers.
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GraphConv, global_mean_pool
-from torch_geometric.data import Data
-import numpy as np
 from pathlib import Path
+import math
+
+
+class PurePyTorchGCNConv(nn.Module):
+    """
+    Standard Kipf & Welling Graph Convolutional Layer implemented with pure PyTorch.
+    Computes \hat{D}^{-1/2} \hat{A} \hat{D}^{-1/2} X W.
+    """
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1.0 / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, x, edge_index):
+        # x: (N, in_features)
+        num_nodes = x.size(0)
+        
+        if edge_index is None or edge_index.numel() == 0:
+            # Self-loops only
+            adj = torch.eye(num_nodes, device=x.device)
+        else:
+            # Add self-loops
+            row, col = edge_index[0], edge_index[1]
+            adj = torch.zeros((num_nodes, num_nodes), device=x.device)
+            adj[row, col] = 1.0
+            adj = adj + torch.eye(num_nodes, device=x.device)
+            
+            # Symmetric normalization D^{-1/2} A D^{-1/2}
+            deg = torch.sum(adj, dim=1)
+            deg_inv_sqrt = torch.pow(deg.clamp(min=1e-6), -0.5)
+            deg_inv_sqrt[torch.isinf(deg_inv_sqrt)] = 0.0
+            d_mat = torch.diag(deg_inv_sqrt)
+            adj = torch.mm(torch.mm(d_mat, adj), d_mat)
+
+        support = torch.mm(x, self.weight)
+        output = torch.mm(adj, support)
+        if self.bias is not None:
+            output = output + self.bias
+        return output
+
 
 class FraudDetectionGNN(nn.Module):
-    """Graph Neural Network for credit card fraud detection using Graph Convolutional Networks."""
+    """Graph Neural Network for credit card & payment fraud detection."""
 
     def __init__(self, input_dim, hidden_dim=64, output_dim=1, num_layers=3, dropout=0.3):
         super(FraudDetectionGNN, self).__init__()
@@ -21,20 +74,27 @@ class FraudDetectionGNN(nn.Module):
         self.conv_layers = nn.ModuleList()
         self.batch_norms = nn.ModuleList()
 
+        # Try to use PyG GCNConv if installed, else fallback to PurePyTorchGCNConv
+        try:
+            from torch_geometric.nn import GCNConv
+            ConvClass = GCNConv
+        except ImportError:
+            ConvClass = PurePyTorchGCNConv
+
         # First layer
-        self.conv_layers.append(GCNConv(input_dim, hidden_dim))
+        self.conv_layers.append(ConvClass(input_dim, hidden_dim))
         self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
         # Hidden layers
         for _ in range(num_layers - 2):
-            self.conv_layers.append(GCNConv(hidden_dim, hidden_dim))
+            self.conv_layers.append(ConvClass(hidden_dim, hidden_dim))
             self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
-        # Output layer
-        self.conv_layers.append(GCNConv(hidden_dim, hidden_dim))
+        # Output graph layer
+        self.conv_layers.append(ConvClass(hidden_dim, hidden_dim))
         self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
-        # Dense layers for classification
+        # Multi-layer perceptron head
         self.fc1 = nn.Linear(hidden_dim, 32)
         self.fc2 = nn.Linear(32, output_dim)
 
@@ -44,23 +104,33 @@ class FraudDetectionGNN(nn.Module):
 
     def forward(self, x, edge_index, batch=None):
         """Forward pass through the GNN."""
-        # Graph convolution with residual connections
         for i, (conv, bn) in enumerate(zip(self.conv_layers[:-1], self.batch_norms[:-1])):
             x = conv(x, edge_index)
-            x = bn(x)
+            if x.size(0) > 1:
+                x = bn(x)
             x = self.relu(x)
             x = self.dropout(x)
 
         # Final graph convolution
         x = self.conv_layers[-1](x, edge_index)
-        x = self.batch_norms[-1](x)
+        if x.size(0) > 1:
+            x = self.batch_norms[-1](x)
         x = self.relu(x)
 
-        # Global pooling if batch is provided
+        # Node / Graph pooling
         if batch is not None:
-            x = global_mean_pool(x, batch)
+            # Group by batch id or mean
+            unique_batches = torch.unique(batch)
+            pooled = []
+            for b in unique_batches:
+                mask = (batch == b)
+                pooled.append(torch.mean(x[mask], dim=0, keepdim=True))
+            x = torch.cat(pooled, dim=0)
+        else:
+            # Mean pool across nodes
+            x = torch.mean(x, dim=0, keepdim=True)
 
-        # Dense layers
+        # Dense classification
         x = self.fc1(x)
         x = self.relu(x)
         x = self.dropout(x)
@@ -70,16 +140,16 @@ class FraudDetectionGNN(nn.Module):
         return x
 
     def save(self, filepath):
-        """Save model to file."""
+        """Save model weights."""
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.state_dict(), filepath)
         print(f"Model saved to {filepath}")
 
     @classmethod
     def load(cls, filepath, input_dim, **kwargs):
-        """Load model from file."""
+        """Load model weights."""
         model = cls(input_dim, **kwargs)
-        model.load_state_dict(torch.load(filepath))
+        model.load_state_dict(torch.load(filepath, map_location=torch.device('cpu')))
         model.eval()
         print(f"Model loaded from {filepath}")
         return model
@@ -91,111 +161,58 @@ class GNNTrainer:
     def __init__(self, model, device='cpu', lr=0.001):
         self.model = model.to(device)
         self.device = device
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
         self.criterion = nn.BCELoss()
-        self.best_val_loss = float('inf')
-        self.patience_counter = 0
 
-    def train_epoch(self, train_loader):
-        """Train for one epoch."""
+    def train_epoch(self, data_list):
+        """Train for one epoch over list of subgraphs."""
         self.model.train()
-        total_loss = 0
+        total_loss = 0.0
         total_correct = 0
         total_samples = 0
 
-        for batch in train_loader:
-            batch = batch.to(self.device)
+        for item in data_list:
+            x = item['x'].to(self.device)
+            edge_index = item['edge_index'].to(self.device)
+            y = item['y'].to(self.device)
+
             self.optimizer.zero_grad()
-
-            # Forward pass
-            out = self.model(batch.x, batch.edge_index, batch.batch)
-            loss = self.criterion(out.squeeze(), batch.y.float())
-
-            # Backward pass
+            out = self.model(x, edge_index)
+            loss = self.criterion(out.squeeze(), y.squeeze())
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
             self.optimizer.step()
 
-            total_loss += loss.item() * batch.num_graphs
-            preds = (out.squeeze() > 0.5).long()
-            total_correct += (preds == batch.y).sum().item()
-            total_samples += batch.num_graphs
+            total_loss += loss.item()
+            pred = (out.squeeze() > 0.5).float()
+            total_correct += (pred == y.squeeze()).sum().item()
+            total_samples += 1
 
-        avg_loss = total_loss / total_samples
-        accuracy = total_correct / total_samples
-
+        avg_loss = total_loss / max(1, total_samples)
+        accuracy = total_correct / max(1, total_samples)
         return avg_loss, accuracy
 
-    def evaluate(self, val_loader):
-        """Evaluate on validation set."""
+    def evaluate(self, data_list):
+        """Evaluate validation performance."""
         self.model.eval()
-        total_loss = 0
+        total_loss = 0.0
         total_correct = 0
         total_samples = 0
-        all_preds = []
-        all_labels = []
 
         with torch.no_grad():
-            for batch in val_loader:
-                batch = batch.to(self.device)
-                out = self.model(batch.x, batch.edge_index, batch.batch)
-                loss = self.criterion(out.squeeze(), batch.y.float())
+            for item in data_list:
+                x = item['x'].to(self.device)
+                edge_index = item['edge_index'].to(self.device)
+                y = item['y'].to(self.device)
 
-                total_loss += loss.item() * batch.num_graphs
-                preds = (out.squeeze() > 0.5).long()
-                total_correct += (preds == batch.y).sum().item()
-                total_samples += batch.num_graphs
+                out = self.model(x, edge_index)
+                loss = self.criterion(out.squeeze(), y.squeeze())
 
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(batch.y.cpu().numpy())
+                total_loss += loss.item()
+                pred = (out.squeeze() > 0.5).float()
+                total_correct += (pred == y.squeeze()).sum().item()
+                total_samples += 1
 
-        avg_loss = total_loss / total_samples
-        accuracy = total_correct / total_samples
-
-        return avg_loss, accuracy, all_preds, all_labels
-
-    def fit(self, train_loader, val_loader, epochs=50, early_stopping_patience=10):
-        """Train the model."""
-        train_losses = []
-        val_losses = []
-        train_accs = []
-        val_accs = []
-
-        for epoch in range(epochs):
-            train_loss, train_acc = self.train_epoch(train_loader)
-            val_loss, val_acc, _, _ = self.evaluate(val_loader)
-
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-            train_accs.append(train_acc)
-            val_accs.append(val_acc)
-
-            if (epoch + 1) % 10 == 0:
-                print(f"Epoch {epoch+1}/{epochs}")
-                print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
-                print(f"  Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-
-            # Early stopping
-            if val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
-                self.patience_counter = 0
-            else:
-                self.patience_counter += 1
-                if self.patience_counter >= early_stopping_patience:
-                    print(f"Early stopping at epoch {epoch+1}")
-                    break
-
-        return {
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'train_accs': train_accs,
-            'val_accs': val_accs,
-        }
-
-    def predict(self, data):
-        """Make predictions on new data."""
-        self.model.eval()
-        with torch.no_grad():
-            data = data.to(self.device)
-            out = self.model(data.x, data.edge_index, data.batch if hasattr(data, 'batch') else None)
-            return out.cpu().numpy()
+        avg_loss = total_loss / max(1, total_samples)
+        accuracy = total_correct / max(1, total_samples)
+        return avg_loss, accuracy

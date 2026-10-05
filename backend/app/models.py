@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
 class User(db.Model):
     __tablename__ = "users"
 
@@ -14,6 +15,7 @@ class User(db.Model):
 
     transactions = db.relationship("Transaction", backref="user", lazy=True, cascade="all, delete-orphan")
     fraud_alerts = db.relationship("FraudAlert", backref="user", lazy=True, cascade="all, delete-orphan")
+    cases = db.relationship("InvestigationCase", backref="user", lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -59,6 +61,13 @@ class Transaction(db.Model):
 
     fraud_alert = db.relationship("FraudAlert", backref="transaction", uselist=False, cascade="all, delete-orphan")
 
+    __table_args__ = (
+        db.Index("idx_tx_user_created", "user_id", "created_at"),
+        db.Index("idx_tx_cust_time", "customer_id", "timestamp"),
+        db.Index("idx_tx_merch_time", "merchant_id", "timestamp"),
+        db.Index("idx_tx_user_fraud", "user_id", "is_fraud_predicted"),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -98,6 +107,10 @@ class FraudAlert(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        db.Index("idx_alert_user_status", "user_id", "is_confirmed", "is_false_positive"),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -107,6 +120,39 @@ class FraudAlert(db.Model):
             "is_false_positive": self.is_false_positive,
             "explanation": self.explanation,
             "created_at": self.created_at.isoformat(),
+        }
+
+
+class InvestigationCase(db.Model):
+    __tablename__ = "investigation_cases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id"), nullable=False, index=True)
+    case_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    status = db.Column(db.String(30), default="OPEN")  # OPEN, IN_TRIAGE, ESCALATED, RESOLVED_FRAUD, RESOLVED_BENIGN
+    priority = db.Column(db.String(20), default="HIGH")  # CRITICAL, HIGH, MEDIUM, LOW
+    assigned_analyst = db.Column(db.String(100), default="Lead Risk Officer")
+    action_taken = db.Column(db.String(100), default="NONE")  # NONE, CARD_FROZEN, MERCHANT_BLOCKED, USER_NOTIFIED
+    notes = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    transaction = db.relationship("Transaction", backref="investigation_case", lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "case_number": self.case_number,
+            "transaction_id": self.transaction_id,
+            "status": self.status,
+            "priority": self.priority,
+            "assigned_analyst": self.assigned_analyst,
+            "action_taken": self.action_taken,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "transaction": self.transaction.to_dict() if self.transaction else None,
         }
 
 

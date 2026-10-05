@@ -1,67 +1,90 @@
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
+from pathlib import Path
+
+
+class SimpleStandardScaler:
+    """Pure numpy standard scaler to avoid hard scikit-learn dependency."""
+    def __init__(self):
+        self.mean_ = None
+        self.scale_ = None
+
+    def fit(self, X):
+        X = np.asarray(X, dtype=np.float32)
+        self.mean_ = np.mean(X, axis=0)
+        self.scale_ = np.std(X, axis=0)
+        self.scale_[self.scale_ == 0.0] = 1.0
+        return self
+
+    def transform(self, X):
+        X = np.asarray(X, dtype=np.float32)
+        if self.mean_ is None or self.scale_ is None:
+            return X
+        return (X - self.mean_) / self.scale_
+
+    def fit_transform(self, X):
+        return self.fit(X).transform(X)
+
 
 class TransactionPreprocessor:
-    """Preprocesses credit card transaction data for GNN training."""
+    """Preprocesses credit card & payment transaction records for GNN training."""
 
     def __init__(self):
-        self.scaler = StandardScaler()
-        self.le_merchant = LabelEncoder()
-        self.le_category = LabelEncoder()
+        self.scaler = SimpleStandardScaler()
+        self.feature_cols = []
 
     def load_kaggle_data(self, filepath):
-        """Load Kaggle credit card fraud dataset."""
-        df = pd.read_csv(filepath)
-        print(f"Loaded {len(df)} transactions")
-        return df
+        """Load CSV credit card fraud dataset using standard csv parser or numpy."""
+        import csv
+        records = []
+        with open(filepath, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                records.append(row)
+        print(f"Loaded {len(records)} transactions from {filepath}")
+        return records
 
-    def preprocess(self, df):
-        """Preprocess the dataset."""
-        # Handle missing values
-        df = df.fillna(0)
+    def preprocess_records(self, records):
+        """Preprocess list of transaction dicts."""
+        n = len(records)
+        amounts = np.array([float(r.get('Amount', r.get('amount', 0.0))) for r in records], dtype=np.float32).reshape(-1, 1)
+        amount_scaled = self.scaler.fit_transform(amounts)
 
-        # Feature engineering
-        df['amount_scaled'] = self.scaler.fit_transform(df[['Amount']])
+        # Build feature matrix
+        # Columns V1..V28 if available, else synthetic PCA proxies
+        v_features = []
+        for v in range(1, 29):
+            col_name = f'V{v}'
+            if n > 0 and col_name in records[0]:
+                vals = [float(r[col_name]) for r in records]
+            else:
+                vals = [0.0] * n
+            v_features.append(vals)
 
-        # Time-based features
-        if 'Time' in df.columns:
-            df['hour'] = (df['Time'] // 3600) % 24
-            df['day'] = (df['Time'] // 86400) % 30
+        v_matrix = np.array(v_features, dtype=np.float32).T  # shape (N, 28)
+        X = np.hstack([v_matrix, amount_scaled])  # shape (N, 29)
 
-        # Encode categorical features
-        if 'Merchant' in df.columns:
-            df['merchant_encoded'] = self.le_merchant.fit_transform(df['Merchant'].astype(str))
+        labels = []
+        for r in records:
+            cls_val = r.get('Class', r.get('class', r.get('is_fraud', 0)))
+            labels.append(1.0 if str(cls_val) in ['1', 'True', 'true'] else 0.0)
 
-        # Select features
-        feature_cols = [col for col in df.columns if col.startswith('V')]
-        feature_cols.extend(['amount_scaled'])
-        if 'hour' in df.columns:
-            feature_cols.extend(['hour', 'day'])
-
-        X = df[feature_cols].values
-        y = df['Class'].values if 'Class' in df.columns else np.zeros(len(df))
-
-        print(f"Features: {len(feature_cols)}")
-        print(f"Fraud rate: {(y.sum() / len(y) * 100):.2f}%")
-
-        return X, y, feature_cols
-
-    def create_train_test_split(self, X, y, test_size=0.2, random_state=42):
-        """Split data into train and test sets."""
-        return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
+        y = np.array(labels, dtype=np.float32)
+        self.feature_cols = [f'V{i}' for i in range(1, 29)] + ['amount_scaled']
+        return X, y, self.feature_cols
 
 
 class GraphBuilder:
-    """Builds graph representation from transactions."""
+    """Builds customer-merchant-card transaction graph data structures."""
 
-    def __init__(self, transaction_data):
-        self.transactions = transaction_data
+    def __init__(self, transactions_data):
+        """
+        Args:
+            transactions_data: list of dicts with customer_id, merchant_id, card_id, amount
+        """
+        self.transactions = transactions_data
         self.customer_node_map = {}
         self.merchant_node_map = {}
         self.card_node_map = {}
-        self.next_node_id = 0
 
     def build_graph(self):
         """Build customer-merchant-card transaction graph."""
@@ -69,50 +92,44 @@ class GraphBuilder:
         edge_features = []
         node_count = 0
 
-        # Create nodes
-        customers = self.transactions['customer_id'].unique()
-        merchants = self.transactions['merchant_id'].unique()
-        cards = self.transactions['card_id'].unique()
+        # Unique nodes
+        customers = sorted(list(set(r.get('customer_id', r.get('Customer', '')) for r in self.transactions if r.get('customer_id', r.get('Customer')))))
+        merchants = sorted(list(set(r.get('merchant_id', r.get('Merchant', '')) for r in self.transactions if r.get('merchant_id', r.get('Merchant')))))
+        cards = sorted(list(set(r.get('card_id', r.get('Card', '')) for r in self.transactions if r.get('card_id', r.get('Card')))))
 
-        # Map node IDs
-        for customer in customers:
-            self.customer_node_map[customer] = node_count
+        for c in customers:
+            self.customer_node_map[c] = node_count
             node_count += 1
 
-        merchant_offset = node_count
-        for merchant in merchants:
-            self.merchant_node_map[merchant] = node_count
+        for m in merchants:
+            self.merchant_node_map[m] = node_count
             node_count += 1
 
-        card_offset = node_count
-        for card in cards:
-            self.card_node_map[card] = node_count
+        for k in cards:
+            self.card_node_map[k] = node_count
             node_count += 1
 
-        # Create edges: customer -> merchant, customer -> card, card -> merchant
-        for _, row in self.transactions.iterrows():
-            customer_node = self.customer_node_map[row['customer_id']]
-            merchant_node = self.merchant_node_map[row['merchant_id']]
-            card_node = self.card_node_map[row['card_id']]
+        for r in self.transactions:
+            c = r.get('customer_id', r.get('Customer'))
+            m = r.get('merchant_id', r.get('Merchant'))
+            k = r.get('card_id', r.get('Card'))
+            amt = float(r.get('amount', r.get('Amount', 0.0)))
 
-            # Customer to Merchant
-            edges.append([customer_node, merchant_node])
-            edge_features.append([row['amount'], 1.0])  # edge_type: customer-merchant
+            if c in self.customer_node_map and m in self.merchant_node_map:
+                edges.append([self.customer_node_map[c], self.merchant_node_map[m]])
+                edge_features.append([amt, 1.0])
 
-            # Customer to Card
-            edges.append([customer_node, card_node])
-            edge_features.append([row['amount'], 2.0])  # edge_type: customer-card
+            if c in self.customer_node_map and k in self.card_node_map:
+                edges.append([self.customer_node_map[c], self.card_node_map[k]])
+                edge_features.append([amt, 2.0])
 
-            # Card to Merchant
-            edges.append([card_node, merchant_node])
-            edge_features.append([row['amount'], 3.0])  # edge_type: card-merchant
-
-        print(f"Graph nodes: {node_count}")
-        print(f"Graph edges: {len(edges)}")
+            if k in self.card_node_map and m in self.merchant_node_map:
+                edges.append([self.card_node_map[k], self.merchant_node_map[m]])
+                edge_features.append([amt, 3.0])
 
         return {
-            'edges': np.array(edges).T if edges else np.array([[], []]),
-            'edge_features': np.array(edge_features) if edge_features else np.array([]),
+            'edges': np.array(edges, dtype=np.int64).T if edges else np.empty((2, 0), dtype=np.int64),
+            'edge_features': np.array(edge_features, dtype=np.float32) if edge_features else np.empty((0, 2), dtype=np.float32),
             'num_nodes': node_count,
             'node_maps': {
                 'customers': self.customer_node_map,
@@ -120,13 +137,3 @@ class GraphBuilder:
                 'cards': self.card_node_map,
             }
         }
-
-    def get_node_id(self, entity_type, entity_id):
-        """Get node ID for a given entity."""
-        if entity_type == 'customer':
-            return self.customer_node_map.get(entity_id)
-        elif entity_type == 'merchant':
-            return self.merchant_node_map.get(entity_id)
-        elif entity_type == 'card':
-            return self.card_node_map.get(entity_id)
-        return None

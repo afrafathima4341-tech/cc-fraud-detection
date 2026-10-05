@@ -19,8 +19,11 @@ cleanup() {
     wait "$SIMULATOR_PID" 2>/dev/null || true
   fi
   if [[ -n "$START_PID" ]]; then
-    kill "$START_PID" 2>/dev/null || true
+    # Send SIGTERM to start.sh so its cleanup trap terminates backend & frontend
+    kill -TERM "$START_PID" 2>/dev/null || true
     wait "$START_PID" 2>/dev/null || true
+    pkill -f "python3 run.py" 2>/dev/null || true
+    pkill -f "vite --host" 2>/dev/null || true
   fi
   echo "Demo stopped."
 }

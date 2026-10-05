@@ -27,6 +27,9 @@ export default function AxiomaNav() {
       <NavLink to="/transactions" onClick={onNavigate} className={({ isActive }) => `axioma-nav__link${isActive ? ' is-active' : ''}`}>
         Transactions
       </NavLink>
+      <NavLink to="/cases" onClick={onNavigate} className={({ isActive }) => `axioma-nav__link${isActive ? ' is-active' : ''}`}>
+        Cases & Triage
+      </NavLink>
     </>
   )
 
@@ -62,17 +65,14 @@ export default function AxiomaNav() {
       </header>
 
       {sidebarOpen && (
-        <div className="axioma-nav__mobile-menu" id="axioma-mobile-menu">
-          <button className="axioma-nav__backdrop" type="button" aria-label="Close navigation menu" onClick={closeMenu} />
-          <div className="axioma-nav__mobile-panel">
-            <nav className="axioma-nav__mobile-links" aria-label="Mobile primary navigation">
-              {renderLinks(closeMenu)}
-            </nav>
-            <div className="axioma-nav__mobile-account">
-              <span className="axioma-nav__username">{user.username}</span>
-              <button className="axioma-nav__signout" onClick={logout}>Sign out</button>
+        <div id="axioma-mobile-menu" className="axioma-nav__mobile-drawer">
+          <nav className="axioma-nav__mobile-links">
+            {renderLinks(closeMenu)}
+            <div className="axioma-nav__mobile-user">
+              <span>{user.username}</span>
+              <button className="axioma-nav__signout" onClick={() => { closeMenu(); logout() }}>Sign out</button>
             </div>
-          </div>
+          </nav>
         </div>
       )}
     </>
