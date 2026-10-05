@@ -25,12 +25,16 @@ class Config:
             )
             sys.exit(1)
 
+def _default_database_url():
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    db_dir = os.path.join(base_dir, "data")
+    os.makedirs(db_dir, exist_ok=True)
+    db_path = os.path.join(db_dir, "fraud_detection.db")
+    return "sqlite:///" + db_path.replace("\\", "/")
+
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "sqlite:////tmp/fraud_detection.db"
-    )
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _default_database_url())
 
     @classmethod
     def init_app(cls, app):
