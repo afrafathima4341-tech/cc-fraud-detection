@@ -308,3 +308,79 @@ def get_customer_stats():
         "avg_fraud_score": float(c[4] or 0),
         "fraud_rate": round((c[3] / c[1] * 100) if c[1] > 0 else 0, 2),
     } for c in customers]), 200
+
+
+@jwt_required()
+def get_transaction_subgraph(transaction_id):
+    """
+    Returns an ego-centric k-hop subgraph around a specific transaction, customer, or merchant.
+    Identifies shared devices, IPs, payment methods, and potential fraud rings.
+    """
+    user_id = get_jwt_identity()
+    target_tx = Transaction.query.filter_by(id=transaction_id, user_id=user_id).first()
+
+    if not target_tx:
+        return jsonify({"message": "Transaction not found"}), 404
+
+    # Fetch 1-hop and 2-hop connected transactions
+    filters = [
+        Transaction.customer_id == target_tx.customer_id,
+        Transaction.merchant_id == target_tx.merchant_id,
+    ]
+    if target_tx.card_id:
+        filters.append(Transaction.card_id == target_tx.card_id)
+    if target_tx.device_id:
+        filters.append(Transaction.device_id == target_tx.device_id)
+    if target_tx.ip_address:
+        filters.append(Transaction.ip_address == target_tx.ip_address)
+    if target_tx.upi_id:
+        filters.append(Transaction.upi_id == target_tx.upi_id)
+
+    related_txns = Transaction.query.filter(
+        Transaction.user_id == user_id,
+        or_(*filters)
+    ).order_by(Transaction.timestamp.desc()).limit(50).all()
+
+    if not any(t.id == target_tx.id for t in related_txns):
+        related_txns.append(target_tx)
+
+    # Detect syndicate rings / shared indicators
+    device_users = {}
+    ip_users = {}
+    for tx in related_txns:
+        if tx.device_id:
+            device_users.setdefault(tx.device_id, set()).add(tx.customer_id)
+        if tx.ip_address:
+            ip_users.setdefault(tx.ip_address, set()).add(tx.customer_id)
+
+    syndicate_indicators = []
+    for dev, users in device_users.items():
+        if len(users) > 1:
+            syndicate_indicators.append({
+                "type": "SHARED_DEVICE",
+                "entity": dev,
+                "affected_customers": list(users),
+                "severity": "CRITICAL" if len(users) >= 3 else "HIGH",
+                "message": f"Hardware device {dev} is shared across {len(users)} distinct customer identities."
+            })
+
+    for ip, users in ip_users.items():
+        if len(users) > 1:
+            syndicate_indicators.append({
+                "type": "SHARED_IP",
+                "entity": ip,
+                "affected_customers": list(users),
+                "severity": "HIGH",
+                "message": f"IP address {ip} accessed by {len(users)} distinct accounts (possible proxy or botnet)."
+            })
+
+    return jsonify({
+        "target_transaction_id": target_tx.id,
+        "related_transactions": [t.to_dict() for t in related_txns],
+        "syndicate_indicators": syndicate_indicators,
+        "summary": {
+            "total_nodes_connected": len(related_txns),
+            "fraud_nodes_count": sum(1 for t in related_txns if t.is_fraud_predicted),
+            "is_syndicate_risk": len(syndicate_indicators) > 0
+        }
+    }), 200

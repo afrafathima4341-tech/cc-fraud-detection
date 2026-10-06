@@ -21,13 +21,24 @@ def generate_synthetic_records(num_samples=2500, random_seed=42):
     num_merchants = max(20, num_samples // 50)
     num_cards = max(50, num_samples // 20)
 
+    num_devices = max(30, num_samples // 30)
+    num_ips = max(30, num_samples // 30)
+
     customer_pool = [f"CUST_{i:04d}" for i in range(num_customers)]
     merchant_pool = [f"MERCH_{i:04d}" for i in range(num_merchants)]
     card_pool = [f"CARD_{i:04d}" for i in range(num_cards)]
+    device_pool = [f"DEV_{i:04d}" for i in range(num_devices)]
+    ip_pool = [f"192.168.1.{i+1}" for i in range(num_ips)]
 
     cust_card_map = {cust: np.random.choice(card_pool, size=np.random.randint(1, 3)).tolist() for cust in customer_pool}
+    cust_device_map = {cust: np.random.choice(device_pool) for cust in customer_pool}
+    cust_ip_map = {cust: np.random.choice(ip_pool) for cust in customer_pool}
+
     risky_merchants = set(np.random.choice(merchant_pool, size=max(2, num_merchants // 10), replace=False))
     risky_customers = set(np.random.choice(customer_pool, size=max(3, num_customers // 15), replace=False))
+    # Fraud rings: shared devices & shared IPs among multiple risky customers
+    shared_fraud_device = "DEV_FRAUD_RING"
+    shared_fraud_ip = "192.168.99.100"
 
     categories = ['shopping', 'electronics', 'travel', 'groceries', 'luxury', 'dining', 'crypto_cashout']
     channels = ['UPI', 'Card', 'Net Banking', 'POS', 'Wallet']
@@ -55,11 +66,16 @@ def generate_synthetic_records(num_samples=2500, random_seed=42):
         else:
             amount = float(np.random.exponential(scale=1800) + 120)
 
+        dev = shared_fraud_device if is_risky_cust and np.random.rand() < 0.7 else cust_device_map.get(cust, device_pool[0])
+        ip = shared_fraud_ip if is_risky_cust and np.random.rand() < 0.7 else cust_ip_map.get(cust, ip_pool[0])
+
         row = {
             'Time': base_time + i * 120,
             'Customer': cust,
             'Merchant': merch,
             'Card': card,
+            'Device': dev,
+            'IP': ip,
             'Amount': round(amount, 2),
             'Category': category,
             'Channel': channel,
@@ -98,14 +114,20 @@ def build_graph_samples(records, X, y, window_size=60):
         node_features = np.zeros((num_nodes, num_features), dtype=np.float32)
 
         for loc_idx, r in enumerate(sub_records):
-            c_node = built['node_maps']['customers'].get(r['Customer'], 0)
-            m_node = built['node_maps']['merchants'].get(r['Merchant'], 0)
-            k_node = built['node_maps']['cards'].get(r['Card'], 0)
+            c_node = built['node_maps']['customers'].get(r.get('Customer'), 0)
+            m_node = built['node_maps']['merchants'].get(r.get('Merchant'), 0)
+            k_node = built['node_maps']['cards'].get(r.get('Card'), 0)
+            d_node = built['node_maps']['devices'].get(r.get('Device'), 0)
+            ip_node = built['node_maps']['ips'].get(r.get('IP'), 0)
             feat = sub_X[loc_idx]
 
             node_features[c_node] += feat
             node_features[m_node] += feat
             node_features[k_node] += feat
+            if d_node < num_nodes:
+                node_features[d_node] += feat
+            if ip_node < num_nodes:
+                node_features[ip_node] += feat
 
         # Normalize node embeddings
         norms = np.linalg.norm(node_features, axis=1, keepdims=True)

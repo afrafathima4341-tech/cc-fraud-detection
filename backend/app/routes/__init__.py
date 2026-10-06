@@ -16,6 +16,7 @@ auth_bp.add_url_rule("/me", "get_current_user", auth.get_current_user, methods=[
 # Transactions endpoints
 transactions_bp.add_url_rule("", "list_transactions", transactions.list_transactions, methods=["GET"])
 transactions_bp.add_url_rule("/<int:transaction_id>", "get_transaction", transactions.get_transaction, methods=["GET"])
+transactions_bp.add_url_rule("/<int:transaction_id>/subgraph", "get_transaction_subgraph", transactions.get_transaction_subgraph, methods=["GET"])
 transactions_bp.add_url_rule("", "create_transaction", transactions.create_transaction, methods=["POST"])
 transactions_bp.add_url_rule("/analytics/overview", "get_transaction_analytics", transactions.get_transaction_analytics, methods=["GET"])
 transactions_bp.add_url_rule("/analytics/merchants", "get_merchant_stats", transactions.get_merchant_stats, methods=["GET"])

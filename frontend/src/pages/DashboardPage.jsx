@@ -412,7 +412,7 @@ export default function DashboardPage() {
               <div style={{ display:'flex', flexWrap:'wrap', gap:'8px 14px', marginTop:10, color:'var(--fg-dim)', fontFamily:'JetBrains Mono, monospace', fontSize:10 }}>
                 {[
                   ['Customer', '#4dd4ac'], ['Merchant', '#d4ff3a'], ['Card', '#ffb627'],
-                  ['UPI', '#75c7e7'], ['Bank', '#ff936d'], ['Network', '#c3a6ff'], ['Flagged', '#ff5e62'],
+                  ['UPI', '#75c7e7'], ['Bank', '#ff936d'], ['Device', '#ff7bf0'], ['IP', '#38ef7d'], ['Flagged', '#ff5e62'],
                 ].map(([label, color]) => (
                   <span key={label} style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
                     <span style={{ width:7, height:7, borderRadius:'50%', background:color }} />{label}

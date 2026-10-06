@@ -92,6 +92,26 @@ export function buildTransactionGraph(transactions = []) {
       addLink(customerId, merchantId, 'transacts with', transaction)
     }
 
+    // Hardware device node (Syndicate / Device sharing detection)
+    if (transaction.device_id) {
+      const deviceId = `device:${normalize(transaction.device_id)}`
+      addNode(deviceId, 'device', `Dev: ${transaction.device_id.slice(0, 10)}`, transaction, {
+        queryKey: 'device_id',
+        queryValue: transaction.device_id,
+      })
+      addLink(customerId, deviceId, 'operates on', transaction)
+    }
+
+    // IP address node (Bot / Proxy cluster detection)
+    if (transaction.ip_address) {
+      const ipId = `ip:${normalize(transaction.ip_address)}`
+      addNode(ipId, 'ip', `IP: ${transaction.ip_address}`, transaction, {
+        queryKey: 'ip_address',
+        queryValue: transaction.ip_address,
+      })
+      addLink(customerId, ipId, 'connected via', transaction)
+    }
+
     if (transaction.merchant_bank) {
       const merchantBankId = `bank:${normalize(transaction.merchant_bank)}`
       addNode(merchantBankId, 'bank', transaction.merchant_bank, transaction)

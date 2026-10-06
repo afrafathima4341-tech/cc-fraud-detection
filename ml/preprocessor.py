@@ -74,28 +74,32 @@ class TransactionPreprocessor:
 
 
 class GraphBuilder:
-    """Builds customer-merchant-card transaction graph data structures."""
+    """Builds heterogeneous customer-merchant-card-device-IP transaction graph data structures."""
 
     def __init__(self, transactions_data):
         """
         Args:
-            transactions_data: list of dicts with customer_id, merchant_id, card_id, amount
+            transactions_data: list of dicts with customer_id, merchant_id, card_id, device_id, ip_address, amount
         """
         self.transactions = transactions_data
         self.customer_node_map = {}
         self.merchant_node_map = {}
         self.card_node_map = {}
+        self.device_node_map = {}
+        self.ip_node_map = {}
 
     def build_graph(self):
-        """Build customer-merchant-card transaction graph."""
+        """Build multi-entity transaction graph."""
         edges = []
         edge_features = []
         node_count = 0
 
         # Unique nodes
-        customers = sorted(list(set(r.get('customer_id', r.get('Customer', '')) for r in self.transactions if r.get('customer_id', r.get('Customer')))))
-        merchants = sorted(list(set(r.get('merchant_id', r.get('Merchant', '')) for r in self.transactions if r.get('merchant_id', r.get('Merchant')))))
-        cards = sorted(list(set(r.get('card_id', r.get('Card', '')) for r in self.transactions if r.get('card_id', r.get('Card')))))
+        customers = sorted(list(set(str(r.get('customer_id', r.get('Customer', ''))).strip() for r in self.transactions if r.get('customer_id', r.get('Customer')))))
+        merchants = sorted(list(set(str(r.get('merchant_id', r.get('Merchant', ''))).strip() for r in self.transactions if r.get('merchant_id', r.get('Merchant')))))
+        cards = sorted(list(set(str(r.get('card_id', r.get('Card', ''))).strip() for r in self.transactions if r.get('card_id', r.get('Card')))))
+        devices = sorted(list(set(str(r.get('device_id', r.get('Device', ''))).strip() for r in self.transactions if r.get('device_id', r.get('Device')))))
+        ips = sorted(list(set(str(r.get('ip_address', r.get('IP', ''))).strip() for r in self.transactions if r.get('ip_address', r.get('IP')))))
 
         for c in customers:
             self.customer_node_map[c] = node_count
@@ -109,10 +113,20 @@ class GraphBuilder:
             self.card_node_map[k] = node_count
             node_count += 1
 
+        for d in devices:
+            self.device_node_map[d] = node_count
+            node_count += 1
+
+        for ip in ips:
+            self.ip_node_map[ip] = node_count
+            node_count += 1
+
         for r in self.transactions:
-            c = r.get('customer_id', r.get('Customer'))
-            m = r.get('merchant_id', r.get('Merchant'))
-            k = r.get('card_id', r.get('Card'))
+            c = str(r.get('customer_id', r.get('Customer', ''))).strip()
+            m = str(r.get('merchant_id', r.get('Merchant', ''))).strip()
+            k = str(r.get('card_id', r.get('Card', ''))).strip()
+            d = str(r.get('device_id', r.get('Device', ''))).strip()
+            ip = str(r.get('ip_address', r.get('IP', ''))).strip()
             amt = float(r.get('amount', r.get('Amount', 0.0)))
 
             if c in self.customer_node_map and m in self.merchant_node_map:
@@ -127,6 +141,14 @@ class GraphBuilder:
                 edges.append([self.card_node_map[k], self.merchant_node_map[m]])
                 edge_features.append([amt, 3.0])
 
+            if c in self.customer_node_map and d in self.device_node_map:
+                edges.append([self.customer_node_map[c], self.device_node_map[d]])
+                edge_features.append([amt, 4.0])
+
+            if c in self.customer_node_map and ip in self.ip_node_map:
+                edges.append([self.customer_node_map[c], self.ip_node_map[ip]])
+                edge_features.append([amt, 5.0])
+
         return {
             'edges': np.array(edges, dtype=np.int64).T if edges else np.empty((2, 0), dtype=np.int64),
             'edge_features': np.array(edge_features, dtype=np.float32) if edge_features else np.empty((0, 2), dtype=np.float32),
@@ -135,5 +157,7 @@ class GraphBuilder:
                 'customers': self.customer_node_map,
                 'merchants': self.merchant_node_map,
                 'cards': self.card_node_map,
+                'devices': self.device_node_map,
+                'ips': self.ip_node_map,
             }
         }
